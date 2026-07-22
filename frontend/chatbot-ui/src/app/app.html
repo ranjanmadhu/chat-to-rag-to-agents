@@ -1,0 +1,82 @@
+<main class="chat-shell" [class.dark-theme]="isDarkTheme()">
+  <header class="app-toolbar">
+    <div class="toolbar-brand">
+      <span class="brand-badge" aria-hidden="true">
+        <mat-icon>smart_toy</mat-icon>
+      </span>
+      <div class="brand-text">
+        <h1>LLM Tutorial Chatbot</h1>
+        <p>Local model playground with streaming replies</p>
+      </div>
+    </div>
+
+    <button
+      mat-icon-button
+      type="button"
+      class="theme-toggle"
+      [attr.aria-label]="themeLabel()"
+      [attr.title]="themeLabel()"
+      (click)="toggleTheme()"
+    >
+      <mat-icon>{{ themeIcon() }}</mat-icon>
+    </button>
+  </header>
+
+  <section class="chat-panel" aria-label="Chat conversation">
+    <div class="message-list">
+      @for (message of messages(); track $index) {
+        <article class="message-row" [class.user-row]="message.role === 'user'">
+          <div class="message-avatar" aria-hidden="true">{{ message.role === 'user' ? 'Y' : 'AI' }}</div>
+          <section class="message" [class.user-message]="message.role === 'user'">
+            <div class="message-role">{{ message.role === 'user' ? 'You' : 'Assistant' }}</div>
+            @if (message.role === 'assistant') {
+              @if (isPendingAssistant($index, message)) {
+                <div class="assistant-loading-content" aria-live="polite">
+                  <mat-spinner diameter="18"></mat-spinner>
+                  <span>Thinking</span>
+                </div>
+              } @else {
+                <markdown class="message-markdown" [data]="message.content"></markdown>
+              }
+
+              @if (!isPendingAssistant($index, message) && formatMetrics(message.metrics)) {
+                <div class="message-stats">{{ formatMetrics(message.metrics) }}</div>
+              }
+            } @else {
+              <p>{{ message.content }}</p>
+            }
+          </section>
+        </article>
+      }
+    </div>
+
+    <form class="composer" (ngSubmit)="sendMessage()">
+      <div class="composer-shell">
+        <button mat-icon-button type="button" class="composer-icon" aria-label="Add context" title="Add context">
+          <mat-icon>add</mat-icon>
+        </button>
+
+        <textarea
+          class="composer-textarea"
+          name="message"
+          rows="1"
+          autocomplete="off"
+          [(ngModel)]="draft"
+          placeholder="Ask anything"
+          aria-label="Message"
+        ></textarea>
+
+        <button
+          mat-icon-button
+          type="submit"
+          class="send-button"
+          [disabled]="!canSend()"
+          aria-label="Send message"
+          title="Send"
+        >
+          <mat-icon>arrow_forward</mat-icon>
+        </button>
+      </div>
+    </form>
+  </section>
+</main>

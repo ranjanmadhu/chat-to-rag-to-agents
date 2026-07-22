@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/dist/
+**/node_modules/
+**/.angular/
+**/coverage/
+**/test-results/
+**/playwright-report/
+.env
+.dev/
+.DS_Store

@@ -1,0 +1,114 @@
+import { HttpClient } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+
+export interface ChatRequest {
+  message: string;
+}
+
+export interface ChatResponse {
+  message: string;
+  model: string;
+  metrics?: ChatMetrics;
+}
+
+export interface ChatMetrics {
+  inputTokens?: number;
+  outputTokens?: number;
+  outputTokensPerSecond?: number;
+}
+
+interface StreamPayload {
+  content?: string;
+  error?: string;
+  metrics?: ChatMetrics;
+}
+
+interface StreamHandlers {
+  onChunk: (chunk: string) => void;
+  onDone?: (metrics?: ChatMetrics) => void;
+}
+
+@Injectable({ providedIn: 'root' })
+export class ChatApiService {
+  private readonly http = inject(HttpClient);
+
+  sendMessage(message: string): Observable<ChatResponse> {
+    return this.http.post<ChatResponse>('/api/chat', { message } satisfies ChatRequest);
+  }
+
+  async streamMessage(message: string, handlers: StreamHandlers): Promise<void> {
+    const response = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream'
+      },
+      body: JSON.stringify({ message } satisfies ChatRequest)
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error('Streaming request failed.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, '\n');
+
+      let delimiterIndex = buffer.indexOf('\n\n');
+      while (delimiterIndex !== -1) {
+        const rawEvent = buffer.slice(0, delimiterIndex);
+        buffer = buffer.slice(delimiterIndex + 2);
+        this.handleSseEvent(rawEvent, handlers);
+        delimiterIndex = buffer.indexOf('\n\n');
+      }
+    }
+
+    const remaining = buffer.trim();
+    if (remaining) {
+      this.handleSseEvent(remaining, handlers);
+    }
+  }
+
+  private handleSseEvent(rawEvent: string, handlers: StreamHandlers): void {
+    let eventName = 'message';
+    const dataLines: string[] = [];
+
+    for (const line of rawEvent.split('\n')) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice('event:'.length).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice('data:'.length).trim());
+      }
+    }
+
+    if (dataLines.length === 0) {
+      return;
+    }
+
+    const payloadText = dataLines.join('\n');
+    const payload = JSON.parse(payloadText) as StreamPayload;
+
+    if (eventName === 'chunk' && payload.content) {
+      handlers.onChunk(payload.content);
+      return;
+    }
+
+    if (eventName === 'error') {
+      throw new Error(payload.error ?? 'Streaming failed.');
+    }
+
+    if (eventName === 'done') {
+      handlers.onDone?.(payload.metrics);
+    }
+  }
+}

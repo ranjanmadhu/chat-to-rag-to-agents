@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start dev stack",
+      "type": "shell",
+      "command": "node scripts/start-dev-stack.mjs",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "dev-stack",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting|already running",
+          "endsPattern": "Development stack is running."
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Stop dev stack",
+      "type": "shell",
+      "command": "node scripts/stop-dev-stack.mjs",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}
