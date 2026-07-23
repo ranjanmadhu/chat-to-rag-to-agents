@@ -6,11 +6,23 @@
 
 ## Quick Start
 
-Use these commands for a first run on Windows:
+Use these commands for a first run on Windows or macOS.
+
+Windows (PowerShell):
 
 	winget install Microsoft.DotNet.SDK.10
 	winget install OpenJS.NodeJS.LTS
 	winget install Ollama.Ollama
+	dotnet restore Chatbot.sln
+	cd frontend/chatbot-ui && npm install && cd ../..
+	node scripts/setup-ollama.mjs
+	node scripts/start-dev-stack.mjs
+
+macOS (Homebrew):
+
+	brew install --cask dotnet-sdk
+	brew install node
+	brew install ollama
 	dotnet restore Chatbot.sln
 	cd frontend/chatbot-ui && npm install && cd ../..
 	node scripts/setup-ollama.mjs
@@ -146,6 +158,12 @@ Recommended on Windows using winget:
 	winget install Microsoft.DotNet.SDK.10
 	winget install OpenJS.NodeJS.LTS
 	winget install Ollama.Ollama
+
+Recommended on macOS using Homebrew:
+
+	brew install --cask dotnet-sdk
+	brew install node
+	brew install ollama
 
 Verify installation:
 
