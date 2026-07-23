@@ -10,16 +10,31 @@
       </div>
     </div>
 
-    <button
-      mat-icon-button
-      type="button"
-      class="theme-toggle"
-      [attr.aria-label]="themeLabel()"
-      [attr.title]="themeLabel()"
-      (click)="toggleTheme()"
-    >
-      <mat-icon>{{ themeIcon() }}</mat-icon>
-    </button>
+    <div class="toolbar-actions">
+      <label class="provider-picker" for="provider-select">
+        <span class="provider-label">Provider</span>
+        <select
+          id="provider-select"
+          [ngModel]="selectedProvider()"
+          (ngModelChange)="setProvider($event)"
+          name="provider"
+        >
+          <option value="ollama">Ollama</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </label>
+
+      <button
+        mat-icon-button
+        type="button"
+        class="theme-toggle"
+        [attr.aria-label]="themeLabel()"
+        [attr.title]="themeLabel()"
+        (click)="toggleTheme()"
+      >
+        <mat-icon>{{ themeIcon() }}</mat-icon>
+      </button>
+    </div>
   </header>
 
   <section class="chat-panel" aria-label="Chat conversation">

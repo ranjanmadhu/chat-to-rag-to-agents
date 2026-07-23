@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Chatbot.Application.Chat;
 
-public sealed class ChatService(IChatModelClient chatModelClient)
+public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
 {
     private const string AssistantRole = "assistant";
     private const string UserRole = "user";
@@ -20,6 +20,7 @@ public sealed class ChatService(IChatModelClient chatModelClient)
             new ChatMessage(UserRole, request.Message.Trim())
         };
 
+        var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
         var response = await chatModelClient.SendAsync(messages, cancellationToken);
         var content = string.IsNullOrWhiteSpace(response.Message.Content)
             ? "The model returned an empty response."
@@ -44,6 +45,8 @@ public sealed class ChatService(IChatModelClient chatModelClient)
         {
             new ChatMessage(UserRole, request.Message.Trim())
         };
+
+        var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
 
         await foreach (var responseChunk in chatModelClient.StreamAsync(messages, cancellationToken)
                            .WithCancellation(cancellationToken))

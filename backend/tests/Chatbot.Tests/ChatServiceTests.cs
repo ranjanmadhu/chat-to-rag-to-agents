@@ -9,7 +9,7 @@ public sealed class ChatServiceTests
     [Fact]
     public async Task SendAsync_Returns_Model_Response()
     {
-        var service = new ChatService(new StubChatModelClient("Hello from the model."));
+        var service = new ChatService(new StubChatModelClientFactory(new StubChatModelClient("Hello from the model.")));
 
         var response = await service.SendAsync(new ChatRequest("Hello"), CancellationToken.None);
 
@@ -20,10 +20,15 @@ public sealed class ChatServiceTests
     [Fact]
     public async Task SendAsync_Rejects_Empty_Message()
     {
-        var service = new ChatService(new StubChatModelClient("Unused"));
+        var service = new ChatService(new StubChatModelClientFactory(new StubChatModelClient("Unused")));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.SendAsync(new ChatRequest(" "), CancellationToken.None));
+    }
+
+    private sealed class StubChatModelClientFactory(IChatModelClient chatModelClient) : IChatModelClientFactory
+    {
+        public IChatModelClient Resolve(string? provider) => chatModelClient;
     }
 
     private sealed class StubChatModelClient(string content) : IChatModelClient

@@ -78,6 +78,37 @@
   margin: 1px 0 0;
 }
 
+.toolbar-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.provider-picker {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.provider-label {
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.provider-picker select {
+  background: transparent;
+  border: 0;
+  color: var(--text-main);
+  font: inherit;
+  outline: none;
+}
+
 .theme-toggle {
   border: 1px solid var(--border-soft);
   color: var(--text-main);
