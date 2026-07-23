@@ -9,11 +9,16 @@ describe('App', () => {
   const chatApi = {
     sendMessage: vi.fn(() =>
       of({ message: '**A model** predicts the next useful token.', model: 'test' })
-    )
+    ),
+    streamMessage: vi.fn(async (_message: string, _provider: string | undefined, handlers) => {
+      handlers.onChunk('**A model** predicts the next useful token.');
+      handlers.onDone?.();
+    })
   };
 
   beforeEach(() => {
     chatApi.sendMessage.mockClear();
+    chatApi.streamMessage.mockClear();
   });
 
   beforeEach(async () => {
@@ -52,7 +57,11 @@ describe('App', () => {
     await new Promise(resolve => setTimeout(resolve));
     fixture.detectChanges();
 
-    expect(chatApi.sendMessage).toHaveBeenCalledWith('What is an LLM?');
+    expect(chatApi.streamMessage).toHaveBeenCalledWith(
+      'What is an LLM?',
+      'ollama',
+      expect.any(Object)
+    );
     expect(fixture.nativeElement.textContent).toContain('A model predicts the next useful token.');
     expect(fixture.nativeElement.querySelector('.message-markdown strong')?.textContent).toBe(
       'A model'

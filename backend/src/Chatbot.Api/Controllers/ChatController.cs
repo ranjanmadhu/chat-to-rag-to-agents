@@ -66,7 +66,7 @@ public sealed class ChatController(ChatService chatService, ILogger<ChatControll
             await WriteSseEventAsync(
                 Response,
                 "error",
-                new { error = "Streaming failed. Check Ollama/backend logs and try again." },
+                new { error = "Streaming failed. Check provider/backend logs and try again." },
                 cancellationToken);
         }
 

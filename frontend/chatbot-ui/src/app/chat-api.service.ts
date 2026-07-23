@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 export interface ChatRequest {
   message: string;
+  provider?: string;
 }
 
 export interface ChatResponse {
@@ -33,18 +34,18 @@ interface StreamHandlers {
 export class ChatApiService {
   private readonly http = inject(HttpClient);
 
-  sendMessage(message: string): Observable<ChatResponse> {
-    return this.http.post<ChatResponse>('/api/chat', { message } satisfies ChatRequest);
+  sendMessage(message: string, provider?: string): Observable<ChatResponse> {
+    return this.http.post<ChatResponse>('/api/chat', { message, provider } satisfies ChatRequest);
   }
 
-  async streamMessage(message: string, handlers: StreamHandlers): Promise<void> {
+  async streamMessage(message: string, provider: string | undefined, handlers: StreamHandlers): Promise<void> {
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream'
       },
-      body: JSON.stringify({ message } satisfies ChatRequest)
+      body: JSON.stringify({ message, provider } satisfies ChatRequest)
     });
 
     if (!response.ok || !response.body) {

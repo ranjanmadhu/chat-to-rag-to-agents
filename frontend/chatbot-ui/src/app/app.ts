@@ -39,6 +39,7 @@ export class App {
   private readonly chatApi = inject(ChatApiService);
 
   readonly draft = signal('');
+  readonly selectedProvider = signal<'ollama' | 'gemini'>('ollama');
   readonly isSending = signal(false);
   readonly messages = signal<ChatMessage[]>([]);
   readonly activeAssistantIndex = signal<number | null>(null);
@@ -72,7 +73,7 @@ export class App {
     this.activeAssistantIndex.set(assistantIndex);
 
     try {
-      await this.chatApi.streamMessage(message, {
+      await this.chatApi.streamMessage(message, this.selectedProvider(), {
         onChunk: chunk => {
           this.updateMessageAt(assistantIndex, current => ({
             ...current,
@@ -158,8 +159,12 @@ export class App {
     this.persistTheme(nextMode);
   }
 
+  setProvider(provider: string): void {
+    this.selectedProvider.set(provider === 'gemini' ? 'gemini' : 'ollama');
+  }
+
   private initializeTheme(): void {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !window.localStorage) {
       return;
     }
 
@@ -174,7 +179,7 @@ export class App {
   }
 
   private persistTheme(mode: ThemeMode): void {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !window.localStorage) {
       return;
     }
 

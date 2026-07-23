@@ -299,9 +299,10 @@ If you can answer these, you are ready for the next module:
 
 Recommended next step:
 
-1. Rich Context phase with text-file input and image input.
+1. [Learning Guide 02: Provider Switching with Gemini](learning-guide-02-provider-switching-and-gemini.md).
+2. After that, move into the Rich Context phase with text-file input and image input.
 
-That transition teaches grounded prompting and payload shaping, which are prerequisites for tool-calling and retrieval workflows.
+Provider switching reinforces the boundary between Application and Infrastructure before the app starts carrying richer payloads. The Rich Context transition then teaches grounded prompting and payload shaping, which are prerequisites for tool-calling and retrieval workflows.
 
 ## 17. References and Further Reading
 
@@ -343,4 +344,3 @@ Use these references for Phase 1 only (foundation chat, streaming, and token met
 2. Read Ollama API docs and map fields to [backend/src/Chatbot.Infrastructure/Ollama/OllamaChatModelClient.cs](../backend/src/Chatbot.Infrastructure/Ollama/OllamaChatModelClient.cs).
 3. Read Angular HttpClient + Streams API docs and map to [frontend/chatbot-ui/src/app/chat-api.service.ts](../frontend/chatbot-ui/src/app/chat-api.service.ts).
 4. Read tokenization and latency references, then compare with metrics shown in the UI.
-

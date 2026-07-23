@@ -6,11 +6,23 @@
 
 ## Quick Start
 
-Use these commands for a first run on Windows:
+Use these commands for a first run on Windows or macOS.
+
+Windows (PowerShell):
 
 	winget install Microsoft.DotNet.SDK.10
 	winget install OpenJS.NodeJS.LTS
 	winget install Ollama.Ollama
+	dotnet restore Chatbot.sln
+	cd frontend/chatbot-ui && npm install && cd ../..
+	node scripts/setup-ollama.mjs
+	node scripts/start-dev-stack.mjs
+
+macOS (Homebrew):
+
+	brew install --cask dotnet-sdk
+	brew install node
+	brew install ollama
 	dotnet restore Chatbot.sln
 	cd frontend/chatbot-ui && npm install && cd ../..
 	node scripts/setup-ollama.mjs
@@ -57,6 +69,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 | --- | --- | --- | --- | --- | --- |
 | Phase 1 - Foundation | Build the smallest useful chatbot and improve responsiveness with streaming and cancellation. | 01 | Basic Text Chat | [Learning Guide 01](docs/learning-guide-01-foundation-chat-and-streaming.md) | Published |
 |  |  | 02 | Streaming Responses | [Learning Guide 01](docs/learning-guide-01-foundation-chat-and-streaming.md) | Published |
+|  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](docs/learning-guide-02-provider-switching-and-gemini.md) | Published |
 | Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | TBD | Planned |
 |  |  | 04 | Image Context | TBD | Planned |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | Planned |
@@ -94,6 +107,7 @@ By following the milestones, you will learn how to:
 
 * Build a full-stack LLM chat experience
 * Stream model responses using Server-Sent Events
+* Switch between local and hosted model providers
 * Handle text and image context
 * Render model output safely as Markdown
 * Define and invoke structured tools
@@ -119,7 +133,7 @@ By following the milestones, you will learn how to:
 | -------------------- | --------------------------------------------------------------------- |
 | Frontend             | Angular, Angular Material, Markdown rendering                         |
 | Backend              | ASP.NET Core, .NET                                                    |
-| Local model hosting  | Ollama with Gemma                                                     |
+| Model providers      | Ollama with Gemma, Google Gemini API                                  |
 | Streaming            | Server-Sent Events                                                    |
 | Vector database      | Qdrant                                                                |
 | Testing              | Backend unit tests, frontend unit tests, Playwright                   |
@@ -128,7 +142,7 @@ By following the milestones, you will learn how to:
 
 The application is designed around interfaces for model and vector-store access.
 
-Ollama and Qdrant are used for the local tutorial, but the application boundaries are intended to support future providers without requiring a complete rewrite of the product experience.
+Ollama and Qdrant are used for the local tutorial, and Gemini demonstrates how the same chat experience can call a hosted model provider without requiring a complete rewrite of the product experience.
 
 ## Run the Application Locally
 
@@ -146,6 +160,12 @@ Recommended on Windows using winget:
 	winget install Microsoft.DotNet.SDK.10
 	winget install OpenJS.NodeJS.LTS
 	winget install Ollama.Ollama
+
+Recommended on macOS using Homebrew:
+
+	brew install --cask dotnet-sdk
+	brew install node
+	brew install ollama
 
 Verify installation:
 
@@ -180,6 +200,29 @@ By default, it checks the model configured in backend/src/Chatbot.Api/appsetting
 You can also provide models explicitly:
 
 	node scripts/setup-ollama.mjs gemma3:4b nomic-embed-text:latest
+
+### Configure Gemini API (Optional)
+
+Gemini is optional. Use it when you want to compare the local Ollama path with a hosted model provider.
+
+Create a `.env` file in the repository root. You can start from `.env.example`:
+
+	LLM_PROVIDER=ollama
+	GEMINI_API_KEY=your-google-ai-studio-api-key
+	GEMINI_MODEL=gemini-2.0-flash
+
+Runtime behavior:
+
+1. `LLM_PROVIDER=ollama` keeps Ollama as the backend default.
+2. `LLM_PROVIDER=gemini` makes Gemini the backend default when the request does not specify a provider.
+3. The frontend provider picker sends `ollama` or `gemini` per request, so you can compare providers without restarting the UI.
+
+The backend reads Gemini settings from `.env`, environment variables, or `backend/src/Chatbot.Api/appsettings.json`.
+
+Gemini setup references:
+
+1. Gemini API docs: https://ai.google.dev/api/generate-content
+2. Google AI Studio API key setup: https://aistudio.google.com/app/apikey
 
 ### Start the Full Development Stack
 
@@ -240,6 +283,15 @@ Terminal 3 (Frontend):
 		 "ChatModel": "gemma3:4b",
 		 "RequestTimeoutSeconds": 300
 	   }
+
+5. Gemini API key is not configured
+   Add `GEMINI_API_KEY` to `.env` or set `Gemini__ApiKey` as an environment variable, then restart the backend.
+
+6. Gemini response streams but metrics are missing
+   Restart the backend after pulling the latest code. Gemini metrics are read from `usageMetadata` and sent on the final SSE `done` event.
+
+7. Gemini model unavailable or unauthorized
+   Check that `GEMINI_MODEL` is available for your API key and account. Try `gemini-2.0-flash` first.
 
 
 
