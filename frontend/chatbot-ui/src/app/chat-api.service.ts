@@ -33,13 +33,14 @@ interface StreamHandlers {
 @Injectable({ providedIn: 'root' })
 export class ChatApiService {
   private readonly http = inject(HttpClient);
+  private readonly apiBaseUrl = this.resolveApiBaseUrl();
 
   sendMessage(message: string, provider?: string): Observable<ChatResponse> {
-    return this.http.post<ChatResponse>('/api/chat', { message, provider } satisfies ChatRequest);
+    return this.http.post<ChatResponse>(`${this.apiBaseUrl}/chat`, { message, provider } satisfies ChatRequest);
   }
 
   async streamMessage(message: string, provider: string | undefined, handlers: StreamHandlers): Promise<void> {
-    const response = await fetch('/api/chat/stream', {
+    const response = await fetch(`${this.apiBaseUrl}/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -111,5 +112,17 @@ export class ChatApiService {
     if (eventName === 'done') {
       handlers.onDone?.(payload.metrics);
     }
+  }
+
+  private resolveApiBaseUrl(): string {
+    const globalConfig = (globalThis as { __CHATBOT_API_BASE_URL__?: unknown }).__CHATBOT_API_BASE_URL__;
+    if (typeof globalConfig === 'string') {
+      const trimmed = globalConfig.trim().replace(/\/$/, '');
+      if (trimmed && trimmed !== '__CHATBOT_API_BASE_URL__') {
+        return trimmed;
+      }
+    }
+
+    return '/api';
   }
 }

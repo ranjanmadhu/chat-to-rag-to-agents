@@ -59,7 +59,7 @@ describe('App', () => {
 
     expect(chatApi.streamMessage).toHaveBeenCalledWith(
       'What is an LLM?',
-      'ollama',
+      'gemini',
       expect.any(Object)
     );
     expect(fixture.nativeElement.textContent).toContain('A model predicts the next useful token.');

@@ -49,12 +49,24 @@ builder.Configuration.AddEnvironmentVariables();
 
 // Add services to the container.
 
+var allowedOrigins = ResolveAllowedOrigins(builder.Configuration);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
-        policy.WithOrigins("http://localhost:4200")
+    {
+        if (allowedOrigins.Any(origin => origin == "*"))
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+            return;
+        }
+
+        policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod();
+    });
 });
 
 builder.Services.AddScoped<ChatService>();
@@ -79,6 +91,19 @@ app.UseCors("Frontend");
 
 app.UseAuthorization();
 
+app.MapGet("/", () => Results.Ok(new
+{
+    service = "Chatbot.Api",
+    status = "ok",
+    endpoints = new[] { "/api/chat", "/api/chat/stream", "/healthz" }
+}));
+
+app.MapGet("/healthz", () => Results.Ok(new
+{
+    status = "ok",
+    utc = DateTimeOffset.UtcNow
+}));
+
 app.MapControllers();
 
 app.Run();
@@ -99,4 +124,16 @@ static string? FindEnvFile()
     }
 
     return null;
+}
+
+static string[] ResolveAllowedOrigins(IConfiguration configuration)
+{
+    var configured = configuration["CORS_ALLOWED_ORIGINS"]
+        ?? configuration["Cors:AllowedOrigins"]
+        ?? "http://localhost:4200";
+
+    return configured
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .ToArray();
 }

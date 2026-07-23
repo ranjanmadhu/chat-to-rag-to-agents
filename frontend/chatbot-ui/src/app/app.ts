@@ -39,7 +39,7 @@ export class App {
   private readonly chatApi = inject(ChatApiService);
 
   readonly draft = signal('');
-  readonly selectedProvider = signal<'ollama' | 'gemini'>('ollama');
+  readonly selectedProvider = signal<'ollama' | 'gemini'>('gemini');
   readonly isSending = signal(false);
   readonly messages = signal<ChatMessage[]>([]);
   readonly activeAssistantIndex = signal<number | null>(null);
