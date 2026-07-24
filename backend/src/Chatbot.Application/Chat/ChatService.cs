@@ -3,12 +3,14 @@ using System.Runtime.CompilerServices;
 
 namespace Chatbot.Application.Chat;
 
-public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
+public sealed class ChatService(
+    IChatModelClientFactory chatModelClientFactory,
+    IContextWindowBudgetResolver contextWindowBudgetResolver,
+    IContextTokenCounter contextTokenCounter)
 {
     private const string AssistantRole = "assistant";
     private const string SystemRole = "system";
     private const string UserRole = "user";
-    private const int MaxContextCharacters = 120_000;
     private const int MaxImageBytes = 5 * 1024 * 1024;
     private const int MaxContextImages = 4;
 
@@ -19,7 +21,7 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
             throw new ArgumentException("Message is required.", nameof(request));
         }
 
-        var messages = BuildMessages(request);
+        var messages = await BuildMessagesAsync(request, cancellationToken);
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
         var response = await chatModelClient.SendAsync(messages, request.Model, cancellationToken);
@@ -42,7 +44,7 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
             throw new ArgumentException("Message is required.", nameof(request));
         }
 
-        var messages = BuildMessages(request);
+        var messages = await BuildMessagesAsync(request, cancellationToken);
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
 
@@ -64,18 +66,38 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
         }
     }
 
-    private static IReadOnlyCollection<ChatMessage> BuildMessages(ChatRequest request)
+    private async Task<IReadOnlyCollection<ChatMessage>> BuildMessagesAsync(
+        ChatRequest request,
+        CancellationToken cancellationToken)
     {
         var messages = new List<ChatMessage>(capacity: 2);
 
         if (!string.IsNullOrWhiteSpace(request.ContextText))
         {
             var trimmedContext = request.ContextText.Trim();
-            if (trimmedContext.Length > MaxContextCharacters)
+            var maxContextTokens = contextWindowBudgetResolver.ResolveMaxContextTokens(request.Provider, request.Model);
+            var countedTokens = await contextTokenCounter.CountTextTokensAsync(
+                trimmedContext,
+                request.Provider,
+                request.Model,
+                cancellationToken);
+
+            if (countedTokens.HasValue && countedTokens.Value > maxContextTokens)
             {
                 throw new ArgumentException(
-                    $"Context text is too large ({trimmedContext.Length} chars). Limit is {MaxContextCharacters} chars.",
+                    $"Context text is too large ({countedTokens.Value} tokens). Limit for provider/model is {maxContextTokens} tokens.",
                     nameof(request));
+            }
+
+            if (!countedTokens.HasValue)
+            {
+                var maxContextCharacters = contextWindowBudgetResolver.ResolveMaxContextCharacters(request.Provider, request.Model);
+                if (trimmedContext.Length > maxContextCharacters)
+                {
+                    throw new ArgumentException(
+                        $"Context text is too large ({trimmedContext.Length} chars). Limit for provider/model is {maxContextCharacters} chars.",
+                        nameof(request));
+                }
             }
 
             var source = string.IsNullOrWhiteSpace(request.ContextFileName)

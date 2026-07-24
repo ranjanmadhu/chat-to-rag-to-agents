@@ -75,6 +75,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 |  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | [0.1.2](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.2) | [PR #3 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/3/changes) |
 |  |  | 02C | Ollama Model Management, Warmup, and Dynamic Capabilities | [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md) | [0.1.3](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.3) | [PR #4 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/4/changes) |
 | Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | [Learning Guide 03](./learning-guide-03-text-file-context.md) | [0.2.0](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.0) | [PR #5 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/5/changes) |
+|  |  | 03A | PDF Context with Backend Upload and Token-Aware Budgeting | [Learning Guide 03A](./learning-guide-03a-pdf-context-backend-upload-and-token-budgeting.md) | TBD | TBD |
 |  |  | 04 | Image Context | [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md) | [0.2.1](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.1) | [PR #6 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/6/changes) |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | TBD | TBD |
 |  |  | 06 | External Tools | TBD | TBD | TBD |
@@ -114,7 +115,8 @@ Direct links for this stage:
 2. [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md)
 3. [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md)
 4. [Learning Guide 03](./learning-guide-03-text-file-context.md)
-5. [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md)
+5. [Learning Guide 03A](./learning-guide-03a-pdf-context-backend-upload-and-token-budgeting.md)
+6. [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md)
 
 Phase 2 Milestone 04 quick demo steps:
 
@@ -395,7 +397,7 @@ For deployment details and profile behavior, see:
 	   }
 
 5. Gemini API key is not configured
-   Add `GEMINI_API_KEY` to `.env` or set `Gemini__ApiKey` as an environment variable, then restart the backend.
+	Add `GEMINI_API_KEY` to `.env`, then restart the backend.
 
 6. Gemini response streams but metrics are missing
    Restart the backend after pulling the latest code. Gemini metrics are read from `usageMetadata` and sent on the final SSE `done` event.

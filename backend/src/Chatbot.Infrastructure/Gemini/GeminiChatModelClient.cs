@@ -30,7 +30,7 @@ public sealed class GeminiChatModelClient(
             logger.LogWarning("Gemini API key was not configured.");
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                "Gemini API key is not configured. Set GEMINI_API_KEY (or Gemini__ApiKey) before using this provider."),
+                "Gemini API key is not configured. Set GEMINI_API_KEY before using this provider."),
                 resolvedModel);
         }
 
@@ -80,7 +80,7 @@ public sealed class GeminiChatModelClient(
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             logger.LogWarning("Gemini API key was not configured for streaming.");
-            yield return new ChatStreamChunk("Gemini API key is not configured. Set GEMINI_API_KEY (or Gemini__ApiKey) before using this provider.");
+            yield return new ChatStreamChunk("Gemini API key is not configured. Set GEMINI_API_KEY before using this provider.");
             yield return new ChatStreamChunk(string.Empty, IsDone: true);
             yield break;
         }
@@ -178,11 +178,7 @@ public sealed class GeminiChatModelClient(
         }
 
         return FirstNonEmpty(
-            Environment.GetEnvironmentVariable("GEMINI_API_KEY"),
-            Environment.GetEnvironmentVariable("GOOGLE_API_KEY"),
-            Environment.GetEnvironmentVariable("Gemini__ApiKey"),
-            Environment.GetEnvironmentVariable("Gemini__Api_Key"),
-            Environment.GetEnvironmentVariable("Gemini__apikey"));
+            Environment.GetEnvironmentVariable("GEMINI_API_KEY"));
     }
 
     private string ResolveModel(string? requestModel)

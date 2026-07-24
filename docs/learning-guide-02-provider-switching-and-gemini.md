@@ -134,8 +134,6 @@ Gemini API key resolution supports:
 
 1. `Gemini:ApiKey` from configuration.
 2. `GEMINI_API_KEY`.
-3. `GOOGLE_API_KEY`.
-4. `Gemini__ApiKey`.
 
 ## 7. Gemini Request Shape
 

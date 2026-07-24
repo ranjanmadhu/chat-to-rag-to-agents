@@ -14,6 +14,10 @@ describe('App', () => {
       handlers.onChunk('**A model** predicts the next useful token.');
       handlers.onDone?.();
     }),
+    streamMessageWithPdf: vi.fn(async (_message: string, _provider: string | undefined, _model: string | undefined, handlers, _pdfFile, _images) => {
+      handlers.onChunk('**A model** predicts the next useful token from PDF context.');
+      handlers.onDone?.();
+    }),
     fetchOllamaModels: vi.fn(async () => [
       {
         model: 'llama3.2:1b',
@@ -30,6 +34,7 @@ describe('App', () => {
   beforeEach(() => {
     chatApi.sendMessage.mockClear();
     chatApi.streamMessage.mockClear();
+    chatApi.streamMessageWithPdf.mockClear();
     chatApi.fetchOllamaModels.mockClear();
     chatApi.warmupOllamaModel.mockClear();
   });
@@ -109,6 +114,41 @@ describe('App', () => {
     expect(fixture.componentInstance.contextText()).toBe('');
     expect(fixture.componentInstance.contextFileName()).toBe('');
     expect(fixture.componentInstance.hasContext()).toBe(false);
+  });
+
+  it('sends attached PDF via multipart streaming endpoint', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const file = new File(['%PDF-1.4'], 'sample.pdf', { type: 'application/pdf' });
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [file]
+    });
+
+    fixture.componentInstance.onPdfFileSelected({ target: input } as unknown as Event);
+    expect(fixture.componentInstance.contextPdfFileName()).toBe('sample.pdf');
+    fixture.componentInstance.draft.set('Summarize this PDF');
+    fixture.detectChanges();
+
+    const form = fixture.debugElement.query(By.css('form')).nativeElement as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve));
+    fixture.detectChanges();
+
+    expect(chatApi.streamMessageWithPdf).toHaveBeenCalledWith(
+      'Summarize this PDF',
+      'gemini',
+      undefined,
+      expect.any(Object),
+      file,
+      undefined
+    );
+    expect(fixture.componentInstance.contextPdfFileName()).toBe('');
+    expect(fixture.componentInstance.contextPdfFile()).toBeNull();
   });
 
   it('shows image preview on user message when image context is sent', async () => {

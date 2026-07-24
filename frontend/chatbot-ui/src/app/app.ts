@@ -66,6 +66,8 @@ export class App {
   readonly modelSwitchError = signal('');
   readonly contextFileName = signal('');
   readonly contextText = signal('');
+  readonly contextPdfFile = signal<File | null>(null);
+  readonly contextPdfFileName = signal('');
   readonly contextImages = signal<ImagePreview[]>([]);
   readonly contextError = signal('');
   readonly dialogImages = signal<ImagePreview[]>([]);
@@ -77,9 +79,10 @@ export class App {
   readonly isDarkTheme = computed(() => this.themeMode() === 'dark');
   readonly isOllamaSelected = computed(() => this.selectedProvider() === 'ollama');
   readonly hasTextContext = computed(() => !!this.contextText());
+  readonly hasPdfContext = computed(() => !!this.contextPdfFile());
   readonly hasImageContext = computed(() => this.contextImages().length > 0);
   readonly imageContextCount = computed(() => this.contextImages().length);
-  readonly hasContext = computed(() => this.hasTextContext() || this.hasImageContext());
+  readonly hasContext = computed(() => this.hasTextContext() || this.hasPdfContext() || this.hasImageContext());
   readonly isImageDialogOpen = computed(() => this.dialogImages().length > 0);
   readonly activeDialogImage = computed(() => this.dialogImages()[this.dialogImageIndex()] ?? null);
   readonly isImageContextSupported = computed(() => {
@@ -117,6 +120,7 @@ export class App {
 
   private async sendMessageInternal(): Promise<void> {
     const message = this.draft().trim();
+    const pdfContextFile = this.contextPdfFile();
     const context = this.resolveInputContext();
     const contextImages = this.contextImages();
 
@@ -129,7 +133,7 @@ export class App {
       {
         role: 'user',
         content: message,
-        contextFileName: context?.fileName,
+        contextFileName: context?.fileName ?? pdfContextFile?.name,
         contextImages: [...contextImages]
       }
     ]);
@@ -140,30 +144,43 @@ export class App {
     this.activeAssistantIndex.set(assistantIndex);
 
     try {
-      await this.chatApi.streamMessage(
-        message,
-        this.selectedProvider(),
-        this.resolveCurrentModel(),
-        {
-          onChunk: chunk => {
-            this.updateMessageAt(assistantIndex, current => ({
-              ...current,
-              content: current.content + chunk
-            }));
-          },
-          onDone: (metrics, model) => {
-            this.updateMessageAt(assistantIndex, current => ({
-              ...current,
-              metrics
-            }));
-
-            if (this.isOllamaSelected() && model) {
-              this.selectedOllamaModel.set(model);
-            }
-          }
+      const streamHandlers = {
+        onChunk: (chunk: string) => {
+          this.updateMessageAt(assistantIndex, current => ({
+            ...current,
+            content: current.content + chunk
+          }));
         },
-        context
-      );
+        onDone: (metrics?: ChatMetrics, model?: string) => {
+          this.updateMessageAt(assistantIndex, current => ({
+            ...current,
+            metrics
+          }));
+
+          if (this.isOllamaSelected() && model) {
+            this.selectedOllamaModel.set(model);
+          }
+        }
+      };
+
+      if (pdfContextFile) {
+        await this.chatApi.streamMessageWithPdf(
+          message,
+          this.selectedProvider(),
+          this.resolveCurrentModel(),
+          streamHandlers,
+          pdfContextFile,
+          context?.images
+        );
+      } else {
+        await this.chatApi.streamMessage(
+          message,
+          this.selectedProvider(),
+          this.resolveCurrentModel(),
+          streamHandlers,
+          context
+        );
+      }
 
       this.updateMessageAt(assistantIndex, current => ({
         ...current,
@@ -253,6 +270,15 @@ export class App {
     fileInput.click();
   }
 
+  openPdfFilePicker(fileInput: HTMLInputElement): void {
+    if (this.isSending() || this.isSwitchingModel()) {
+      return;
+    }
+
+    fileInput.value = '';
+    fileInput.click();
+  }
+
   openImageFilePicker(fileInput: HTMLInputElement): void {
     if (this.isSending() || this.isSwitchingModel() || !this.isImageContextSupported()) {
       return;
@@ -291,10 +317,31 @@ export class App {
 
       this.contextFileName.set(file.name);
       this.contextText.set(trimmed);
+      this.clearPdfContext();
     } catch {
       this.contextError.set('Unable to read selected file. Try a plain text file.');
       this.clearContextFile();
     }
+  }
+
+  onPdfFileSelected(event: Event): void {
+    this.contextError.set('');
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!this.isPdfFile(file)) {
+      this.contextError.set('Only PDF files are supported for PDF context.');
+      this.clearPdfContext();
+      return;
+    }
+
+    this.contextPdfFile.set(file);
+    this.contextPdfFileName.set(file.name);
+    this.clearContextFile();
   }
 
   async onImageFileSelected(event: Event): Promise<void> {
@@ -425,6 +472,11 @@ export class App {
   clearContextFile(): void {
     this.contextFileName.set('');
     this.contextText.set('');
+  }
+
+  clearPdfContext(): void {
+    this.contextPdfFile.set(null);
+    this.contextPdfFileName.set('');
   }
 
   formatModelOption(option: OllamaModelOption): string {
@@ -673,6 +725,7 @@ export class App {
 
   private clearAllContext(): void {
     this.clearContextFile();
+    this.clearPdfContext();
     this.clearImageContext();
     this.contextError.set('');
   }
@@ -691,6 +744,14 @@ export class App {
       reader.onerror = () => reject(reader.error ?? new Error('Image read failed.'));
       reader.readAsDataURL(file);
     });
+  }
+
+  private isPdfFile(file: File): boolean {
+    if (file.type === 'application/pdf') {
+      return true;
+    }
+
+    return file.name.toLowerCase().endsWith('.pdf');
   }
 
   private resetSession(): void {

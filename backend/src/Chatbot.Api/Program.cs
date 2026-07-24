@@ -28,7 +28,6 @@ if (envFilePath is not null)
         if (string.Equals(key, "GEMINI_API_KEY", StringComparison.OrdinalIgnoreCase))
         {
             Environment.SetEnvironmentVariable("GEMINI_API_KEY", value);
-            Environment.SetEnvironmentVariable("Gemini__ApiKey", value);
         }
         else if (string.Equals(key, "GEMINI_MODEL", StringComparison.OrdinalIgnoreCase))
         {
