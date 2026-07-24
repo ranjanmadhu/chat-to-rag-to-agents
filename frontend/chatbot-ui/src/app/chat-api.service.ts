@@ -38,6 +38,14 @@ export interface ChatMetrics {
   outputTokensPerSecond?: number;
 }
 
+export interface PdfContextResponse {
+  contextText: string;
+  source: 'embedded-text' | 'ocr' | 'mixed' | 'none';
+  pageCount: number;
+  extractedChars: number;
+  warnings: string[];
+}
+
 interface StreamPayload {
   content?: string;
   error?: string;
@@ -112,32 +120,52 @@ export class ChatApiService {
       throw new Error('Streaming request failed.');
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    await this.consumeSseResponse(response, handlers);
+  }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
+  async streamMessageWithPdf(
+    message: string,
+    provider: string | undefined,
+    model: string | undefined,
+    handlers: StreamHandlers,
+    pdfFile: File,
+    contextImages?: ImageContext[]
+  ): Promise<void> {
+    const formData = new FormData();
+    formData.append('message', message);
 
-      buffer += decoder.decode(value, { stream: true });
-      buffer = buffer.replace(/\r\n/g, '\n');
-
-      let delimiterIndex = buffer.indexOf('\n\n');
-      while (delimiterIndex !== -1) {
-        const rawEvent = buffer.slice(0, delimiterIndex);
-        buffer = buffer.slice(delimiterIndex + 2);
-        this.handleSseEvent(rawEvent, handlers);
-        delimiterIndex = buffer.indexOf('\n\n');
-      }
+    if (provider) {
+      formData.append('provider', provider);
     }
 
-    const remaining = buffer.trim();
-    if (remaining) {
-      this.handleSseEvent(remaining, handlers);
+    if (model) {
+      formData.append('model', model);
     }
+
+    formData.append('pdfFile', pdfFile, pdfFile.name);
+
+    if (contextImages && contextImages.length > 0) {
+      formData.append('contextImagesJson', JSON.stringify(contextImages));
+    }
+
+    const response = await fetch(`${this.apiBaseUrl}/chat/stream-with-pdf`, {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream'
+      },
+      body: formData
+    });
+
+    if (!response.ok || !response.body) {
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        const error = (await response.json()) as { error?: string };
+        throw new Error(error.error ?? 'Streaming request failed.');
+      }
+
+      throw new Error('Streaming request failed.');
+    }
+
+    await this.consumeSseResponse(response, handlers);
   }
 
   private handleSseEvent(rawEvent: string, handlers: StreamHandlers): void {
@@ -170,6 +198,35 @@ export class ChatApiService {
 
     if (eventName === 'done') {
       handlers.onDone?.(payload.metrics, payload.model);
+    }
+  }
+
+  private async consumeSseResponse(response: Response, handlers: StreamHandlers): Promise<void> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, '\n');
+
+      let delimiterIndex = buffer.indexOf('\n\n');
+      while (delimiterIndex !== -1) {
+        const rawEvent = buffer.slice(0, delimiterIndex);
+        buffer = buffer.slice(delimiterIndex + 2);
+        this.handleSseEvent(rawEvent, handlers);
+        delimiterIndex = buffer.indexOf('\n\n');
+      }
+    }
+
+    const remaining = buffer.trim();
+    if (remaining) {
+      this.handleSseEvent(remaining, handlers);
     }
   }
 
@@ -215,6 +272,33 @@ export class ChatApiService {
 
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `Unable to warm up model '${model}'.`);
+  }
+
+  async extractPdfContext(file: File): Promise<PdfContextResponse> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    const response = await fetch(`${this.apiBaseUrl}/chat/context/pdf`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json'
+      },
+      body: formData
+    });
+
+    const body = (await response.json().catch(() => null)) as
+      | PdfContextResponse
+      | { error?: string }
+      | null;
+
+    if (!response.ok) {
+      throw new Error(
+        (body as { error?: string } | null)?.error ??
+          `Unable to extract context from '${file.name}'.`
+      );
+    }
+
+    return body as PdfContextResponse;
   }
 
   private resolveApiBaseUrl(): string {

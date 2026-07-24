@@ -130,6 +130,14 @@
       />
 
       <input
+        #pdfFileInput
+        type="file"
+        class="hidden-context-input"
+        accept=".pdf,application/pdf"
+        (change)="onPdfFileSelected($event)"
+      />
+
+      <input
         #imageFileInput
         type="file"
         class="hidden-context-input"
@@ -151,6 +159,23 @@
                 aria-label="Remove attached context file"
                 title="Remove text context"
                 (click)="clearContextFile()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
+
+          @if (hasPdfContext()) {
+            <div class="context-pill">
+              <span class="context-pill-label">PDF</span>
+              <span class="context-pill-name">{{ contextPdfFileName() }}</span>
+              <button
+                mat-icon-button
+                type="button"
+                class="context-pill-remove"
+                aria-label="Remove attached PDF context file"
+                title="Remove PDF context"
+                (click)="clearPdfContext()"
               >
                 <mat-icon>close</mat-icon>
               </button>
@@ -215,6 +240,17 @@
             (click)="openContextFilePicker(contextFileInput)"
           >
             <mat-icon>add</mat-icon>
+          </button>
+
+          <button
+            mat-icon-button
+            type="button"
+            class="composer-icon"
+            aria-label="Add PDF context"
+            title="Add PDF context"
+            (click)="openPdfFilePicker(pdfFileInput)"
+          >
+            <mat-icon>picture_as_pdf</mat-icon>
           </button>
 
           @if (isImageContextSupported()) {
