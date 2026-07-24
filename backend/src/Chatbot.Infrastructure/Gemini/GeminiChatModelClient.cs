@@ -18,15 +18,20 @@ public sealed class GeminiChatModelClient(
 {
     private readonly GeminiOptions _options = options.Value;
 
-    public async Task<ChatModelResponse> SendAsync(IReadOnlyCollection<ChatMessage> messages, CancellationToken cancellationToken)
+    public async Task<ChatModelResponse> SendAsync(
+        IReadOnlyCollection<ChatMessage> messages,
+        string? model,
+        CancellationToken cancellationToken)
     {
+        var resolvedModel = ResolveModel(model);
         var apiKey = ResolveApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             logger.LogWarning("Gemini API key was not configured.");
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                "Gemini API key is not configured. Set GEMINI_API_KEY (or Gemini__ApiKey) before using this provider."));
+                "Gemini API key is not configured. Set GEMINI_API_KEY (or Gemini__ApiKey) before using this provider."),
+                resolvedModel);
         }
 
         try
@@ -36,8 +41,7 @@ public sealed class GeminiChatModelClient(
                     ResolveRole(message.Role),
                     new[] { new GeminiPart(message.Content) })).ToArray());
 
-            var model = ResolveModel();
-            var requestUri = $"/v1beta/models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+            var requestUri = $"/v1beta/models/{resolvedModel}:generateContent?key={Uri.EscapeDataString(apiKey)}";
             var stopwatch = Stopwatch.StartNew();
             using var response = await httpClient.PostAsJsonAsync(requestUri, request, cancellationToken);
             response.EnsureSuccessStatusCode();
@@ -48,6 +52,7 @@ public sealed class GeminiChatModelClient(
 
             return new ChatModelResponse(
                 new ChatMessage("assistant", text),
+                resolvedModel,
                 BuildMetrics(body?.UsageMetadata, stopwatch.Elapsed));
         }
         catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
@@ -55,19 +60,22 @@ public sealed class GeminiChatModelClient(
             logger.LogWarning(ex, "Gemini request failed with status {StatusCode}.", ex.StatusCode);
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-            $"Gemini request failed ({ex.StatusCode}). Check API key permissions, model availability, and Gemini quota/rate limits for this project."));
+            $"Gemini request failed ({ex.StatusCode}). Check API key permissions, model availability, and Gemini quota/rate limits for this project."),
+            resolvedModel);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Gemini request failed.");
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                "Gemini is currently unavailable. Check the configured API key and model settings."));
+                "Gemini is currently unavailable. Check the configured API key and model settings."),
+                resolvedModel);
         }
     }
 
     public async IAsyncEnumerable<ChatStreamChunk> StreamAsync(
         IReadOnlyCollection<ChatMessage> messages,
+        string? model,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var apiKey = ResolveApiKey();
@@ -84,7 +92,7 @@ public sealed class GeminiChatModelClient(
                 ResolveRole(message.Role),
                 new[] { new GeminiPart(message.Content) })).ToArray());
 
-        await foreach (var chunk in StreamFromGeminiAsync(request, cancellationToken))
+        await foreach (var chunk in StreamFromGeminiAsync(request, model, cancellationToken))
         {
             yield return chunk;
         }
@@ -92,11 +100,12 @@ public sealed class GeminiChatModelClient(
 
     private async IAsyncEnumerable<ChatStreamChunk> StreamFromGeminiAsync(
         GeminiGenerateContentRequest request,
+        string? model,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var model = ResolveModel();
+        var resolvedModel = ResolveModel(model);
         var apiKey = ResolveApiKey();
-        var requestUri = $"/v1beta/models/{model}:streamGenerateContent?key={Uri.EscapeDataString(apiKey)}&alt=sse";
+        var requestUri = $"/v1beta/models/{resolvedModel}:streamGenerateContent?key={Uri.EscapeDataString(apiKey)}&alt=sse";
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, requestUri)
         {
             Content = JsonContent.Create(request)
@@ -123,8 +132,8 @@ public sealed class GeminiChatModelClient(
         if (fallbackContent is not null)
         {
             response?.Dispose();
-            yield return new ChatStreamChunk(fallbackContent);
-            yield return new ChatStreamChunk(string.Empty, IsDone: true);
+            yield return new ChatStreamChunk(fallbackContent, Model: resolvedModel);
+            yield return new ChatStreamChunk(string.Empty, IsDone: true, Model: resolvedModel);
             yield break;
         }
 
@@ -156,13 +165,13 @@ public sealed class GeminiChatModelClient(
                 var text = payload?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
                 if (!string.IsNullOrWhiteSpace(text))
                 {
-                    yield return new ChatStreamChunk(text);
+                    yield return new ChatStreamChunk(text, Model: resolvedModel);
                 }
             }
         }
 
         stopwatch.Stop();
-        yield return new ChatStreamChunk(string.Empty, IsDone: true, Metrics: BuildMetrics(usageMetadata, stopwatch.Elapsed));
+        yield return new ChatStreamChunk(string.Empty, IsDone: true, Model: resolvedModel, Metrics: BuildMetrics(usageMetadata, stopwatch.Elapsed));
     }
 
     private string ResolveApiKey()
@@ -180,9 +189,10 @@ public sealed class GeminiChatModelClient(
             Environment.GetEnvironmentVariable("Gemini__apikey"));
     }
 
-    private string ResolveModel()
+    private string ResolveModel(string? requestModel)
     {
         return FirstNonEmpty(
+            requestModel,
             _options.Model,
             Environment.GetEnvironmentVariable("GEMINI_MODEL"),
             Environment.GetEnvironmentVariable("GOOGLE_GEMINI_MODEL"),

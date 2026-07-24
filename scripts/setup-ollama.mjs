@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appSettingsPath = resolve(root, 'backend/src/Chatbot.Api/appsettings.json');
+const tutorialModelSet = [
+  'deepseek-r1:1.5b',
+  'gemma2:2b',
+  'phi3:mini',
+  'llama3.2:1b',
+  'llama3.2:3b'
+];
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, {
@@ -145,7 +152,7 @@ function getDesiredModels() {
   }
 
   const configured = parseConfiguredChatModel();
-  const defaults = [configured, 'nomic-embed-text:latest'].filter(Boolean);
+  const defaults = [configured, ...tutorialModelSet, 'nomic-embed-text:latest'].filter(Boolean);
 
   return [...new Set(defaults)];
 }

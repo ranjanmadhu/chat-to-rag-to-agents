@@ -109,6 +109,24 @@
   outline: none;
 }
 
+.provider-picker select option {
+  background: #f7f9ff;
+  color: #17233a;
+}
+
+.dark-theme .provider-picker select option {
+  background: #0f1728;
+  color: #ecf3ff;
+}
+
+.model-picker {
+  max-width: min(52vw, 420px);
+}
+
+.model-picker select {
+  min-width: min(46vw, 360px);
+}
+
 .theme-toggle {
   border: 1px solid var(--border-soft);
   color: var(--text-main);
@@ -118,6 +136,32 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
+  position: relative;
+}
+
+.model-overlay {
+  align-items: center;
+  backdrop-filter: blur(5px);
+  background: color-mix(in srgb, var(--bg-base) 86%, transparent);
+  color: var(--text-main);
+  display: flex;
+  gap: 10px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 12;
+}
+
+.model-error {
+  background: color-mix(in srgb, #ff8a65 24%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #ff8a65 38%, var(--border-soft));
+  border-radius: 12px;
+  color: var(--text-main);
+  font-size: 0.84rem;
+  margin: 14px auto 0;
+  max-width: 940px;
+  padding: 10px 12px;
+  width: calc(100% - 28px);
 }
 
 .message-list {
@@ -384,5 +428,14 @@
 
   .composer {
     padding-bottom: 14px;
+  }
+
+  .model-picker {
+    max-width: 100%;
+  }
+
+  .model-picker select {
+    min-width: 160px;
+    width: min(52vw, 220px);
   }
 }

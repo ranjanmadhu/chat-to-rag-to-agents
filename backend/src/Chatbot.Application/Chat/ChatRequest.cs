@@ -1,3 +1,3 @@
 namespace Chatbot.Application.Chat;
 
-public sealed record ChatRequest(string Message, string? Provider = null);
+public sealed record ChatRequest(string Message, string? Provider = null, string? Model = null);

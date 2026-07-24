@@ -18,11 +18,31 @@
           [ngModel]="selectedProvider()"
           (ngModelChange)="setProvider($event)"
           name="provider"
+          [disabled]="isSending() || isSwitchingModel()"
         >
           <option value="gemini">Gemini</option>
           <option value="ollama">Ollama</option>
         </select>
       </label>
+
+      @if (isOllamaSelected()) {
+        <label class="provider-picker model-picker" for="model-select">
+          <span class="provider-label">Model</span>
+          <select
+            id="model-select"
+            [ngModel]="selectedOllamaModel()"
+            (ngModelChange)="setOllamaModel($event)"
+            name="ollamaModel"
+            [disabled]="isSending() || isSwitchingModel()"
+          >
+            @for (model of ollamaModels(); track model.model) {
+              <option [value]="model.model" [disabled]="!model.supportsText">
+                {{ formatModelOption(model) }}
+              </option>
+            }
+          </select>
+        </label>
+      }
 
       <button
         mat-icon-button
@@ -38,6 +58,17 @@
   </header>
 
   <section class="chat-panel" aria-label="Chat conversation">
+    @if (isSwitchingModel()) {
+      <div class="model-overlay" aria-live="polite">
+        <mat-spinner diameter="24"></mat-spinner>
+        <span>{{ modelSwitchStatus() || 'Preparing selected model...' }}</span>
+      </div>
+    }
+
+    @if (modelSwitchError()) {
+      <div class="model-error" role="status">{{ modelSwitchError() }}</div>
+    }
+
     <div class="message-list">
       @for (message of messages(); track $index) {
         <article class="message-row" [class.user-row]="message.role === 'user'">
@@ -77,8 +108,9 @@
           rows="1"
           autocomplete="off"
           [(ngModel)]="draft"
-          placeholder="Ask anything"
+          [placeholder]="isSwitchingModel() ? 'Waiting for model warmup...' : 'Ask anything'"
           aria-label="Message"
+          [disabled]="isSwitchingModel()"
         ></textarea>
 
         <button

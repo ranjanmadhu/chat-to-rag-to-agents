@@ -7,10 +7,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MarkdownComponent } from 'ngx-markdown';
-import { ChatApiService, ChatMetrics } from './chat-api.service';
+import { ChatApiService, ChatMetrics, OllamaModelOption } from './chat-api.service';
 
 type ChatRole = 'user' | 'assistant';
 type ThemeMode = 'light' | 'dark';
+type Provider = 'ollama' | 'gemini';
 
 const ThemeStorageKey = 'chatbot-ui-theme-mode';
 
@@ -39,17 +40,29 @@ export class App {
   private readonly chatApi = inject(ChatApiService);
 
   readonly draft = signal('');
-  readonly selectedProvider = signal<'ollama' | 'gemini'>('gemini');
+  readonly selectedProvider = signal<Provider>('gemini');
+  readonly selectedOllamaModel = signal('');
+  readonly ollamaModels = signal<OllamaModelOption[]>([]);
   readonly isSending = signal(false);
+  readonly isSwitchingModel = signal(false);
+  readonly modelSwitchStatus = signal('');
+  readonly modelSwitchError = signal('');
   readonly messages = signal<ChatMessage[]>([]);
   readonly activeAssistantIndex = signal<number | null>(null);
   readonly themeMode = signal<ThemeMode>('light');
   readonly isDarkTheme = computed(() => this.themeMode() === 'dark');
+  readonly isOllamaSelected = computed(() => this.selectedProvider() === 'ollama');
   readonly themeIcon = computed(() => (this.isDarkTheme() ? 'light_mode' : 'dark_mode'));
   readonly themeLabel = computed(() =>
     this.isDarkTheme() ? 'Switch to light mode' : 'Switch to dark mode'
   );
-  readonly canSend = computed(() => this.draft().trim().length > 0 && !this.isSending());
+  readonly canSend = computed(
+    () =>
+      this.draft().trim().length > 0 &&
+      !this.isSending() &&
+      !this.isSwitchingModel() &&
+      (!this.isOllamaSelected() || !!this.selectedOllamaModel())
+  );
 
   constructor() {
     this.initializeTheme();
@@ -73,18 +86,22 @@ export class App {
     this.activeAssistantIndex.set(assistantIndex);
 
     try {
-      await this.chatApi.streamMessage(message, this.selectedProvider(), {
+      await this.chatApi.streamMessage(message, this.selectedProvider(), this.resolveCurrentModel(), {
         onChunk: chunk => {
           this.updateMessageAt(assistantIndex, current => ({
             ...current,
             content: current.content + chunk
           }));
         },
-        onDone: metrics => {
+        onDone: (metrics, model) => {
           this.updateMessageAt(assistantIndex, current => ({
             ...current,
             metrics
           }));
+
+          if (this.isOllamaSelected() && model) {
+            this.selectedOllamaModel.set(model);
+          }
         }
       });
 
@@ -95,7 +112,7 @@ export class App {
     } catch {
       this.updateMessageAt(assistantIndex, () => ({
         role: 'assistant',
-        content: 'The API is unavailable. Start the backend and try again.'
+        content: this.modelSwitchError() || 'The API is unavailable. Start the backend and try again.'
       }));
     } finally {
       this.isSending.set(false);
@@ -160,7 +177,159 @@ export class App {
   }
 
   setProvider(provider: string): void {
-    this.selectedProvider.set(provider === 'gemini' ? 'gemini' : 'ollama');
+    void this.setProviderInternal(provider === 'gemini' ? 'gemini' : 'ollama');
+  }
+
+  setOllamaModel(model: string): void {
+    void this.switchOllamaModel(model);
+  }
+
+  formatModelOption(option: OllamaModelOption): string {
+    let modality = 'other';
+    if (option.supportsText && option.supportsImage) {
+      modality = 'text+image';
+    } else if (option.supportsText) {
+      modality = 'text';
+    } else if (option.supportsImage) {
+      modality = 'image';
+    }
+
+    const install = option.isInstalled ? 'installed' : 'not installed';
+    return `${option.label} (${modality}, ${install})`;
+  }
+
+  private async setProviderInternal(nextProvider: Provider): Promise<void> {
+    if (nextProvider === this.selectedProvider() || this.isSending() || this.isSwitchingModel()) {
+      return;
+    }
+
+    if (!this.confirmSessionReset(`Switch provider to ${nextProvider}`)) {
+      return;
+    }
+
+    this.selectedProvider.set(nextProvider);
+    this.resetSession();
+
+    if (nextProvider === 'ollama') {
+      await this.prepareOllamaModelSelection(false);
+    } else {
+      this.modelSwitchError.set('');
+      this.modelSwitchStatus.set('');
+    }
+  }
+
+  private async switchOllamaModel(nextModel: string): Promise<void> {
+    const trimmed = nextModel.trim();
+    if (!trimmed || !this.isOllamaSelected() || this.isSending() || this.isSwitchingModel()) {
+      return;
+    }
+
+    if (trimmed === this.selectedOllamaModel()) {
+      return;
+    }
+
+    if (!this.confirmSessionReset(`Switch model to ${trimmed}`)) {
+      return;
+    }
+
+    await this.warmupAndActivateModel(trimmed, true);
+  }
+
+  private async prepareOllamaModelSelection(resetSessionOnWarmup: boolean): Promise<void> {
+    this.modelSwitchError.set('');
+
+    if (this.ollamaModels().length === 0) {
+      this.modelSwitchStatus.set('Loading local Ollama models...');
+      try {
+        const models = await this.chatApi.fetchOllamaModels();
+        this.ollamaModels.set(models);
+      } catch (error) {
+        this.modelSwitchError.set(this.toErrorMessage(error));
+        return;
+      } finally {
+        this.modelSwitchStatus.set('');
+      }
+    }
+
+    const preferred = this.resolveDefaultOllamaModel();
+    if (!preferred) {
+      this.modelSwitchError.set('No Ollama models were returned by the backend. Pull a model and retry.');
+      return;
+    }
+
+    await this.warmupAndActivateModel(preferred, resetSessionOnWarmup);
+  }
+
+  private async warmupAndActivateModel(model: string, resetSessionOnWarmup: boolean): Promise<void> {
+    this.isSwitchingModel.set(true);
+    this.modelSwitchError.set('');
+    this.modelSwitchStatus.set(`Preparing model ${model}. This can take a few seconds...`);
+
+    try {
+      await this.chatApi.warmupOllamaModel(model);
+      this.selectedOllamaModel.set(model);
+      if (resetSessionOnWarmup) {
+        this.resetSession();
+      }
+    } catch (error) {
+      this.modelSwitchError.set(this.toErrorMessage(error));
+    } finally {
+      this.modelSwitchStatus.set('');
+      this.isSwitchingModel.set(false);
+    }
+  }
+
+  private resolveDefaultOllamaModel(): string {
+    const models = this.ollamaModels();
+    const installedRecommended = models.find(
+      option => option.isRecommended && option.isInstalled && option.supportsText
+    );
+    if (installedRecommended) {
+      return installedRecommended.model;
+    }
+
+    const anyInstalled = models.find(option => option.isInstalled && option.supportsText);
+    if (anyInstalled) {
+      return anyInstalled.model;
+    }
+
+    const recommended = models.find(option => option.isRecommended && option.supportsText);
+    if (recommended) {
+      return recommended.model;
+    }
+
+    return '';
+  }
+
+  private confirmSessionReset(actionLabel: string): boolean {
+    if (this.messages().length === 0 || typeof window === 'undefined') {
+      return true;
+    }
+
+    return window.confirm(`${actionLabel}? This starts a new chat session and clears current messages.`);
+  }
+
+  private resolveCurrentModel(): string | undefined {
+    if (!this.isOllamaSelected()) {
+      return undefined;
+    }
+
+    const selected = this.selectedOllamaModel().trim();
+    return selected || undefined;
+  }
+
+  private resetSession(): void {
+    this.messages.set([]);
+    this.activeAssistantIndex.set(null);
+    this.draft.set('');
+  }
+
+  private toErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Operation failed. Please retry.';
   }
 
   private initializeTheme(): void {
