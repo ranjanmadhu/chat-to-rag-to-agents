@@ -9,3 +9,4 @@
 .env
 .dev/
 .DS_Store
+.artifacts/

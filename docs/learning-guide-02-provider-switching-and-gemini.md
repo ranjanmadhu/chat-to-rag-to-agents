@@ -103,7 +103,7 @@ Example `.env`:
 ```text
 LLM_PROVIDER=ollama
 GEMINI_API_KEY=your-google-ai-studio-api-key
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
 Relevant `appsettings.json` fields:
@@ -117,7 +117,7 @@ Relevant `appsettings.json` fields:
     "RequestTimeoutSeconds": 300
   },
   "Gemini": {
-    "Model": "gemini-2.0-flash",
+    "Model": "gemini-3.6-flash",
     "BaseUrl": "https://generativelanguage.googleapis.com",
     "RequestTimeoutSeconds": 300
   }
@@ -281,7 +281,7 @@ Edit `.env`:
 ```text
 LLM_PROVIDER=ollama
 GEMINI_API_KEY=your-google-ai-studio-api-key
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-3.6-flash
 ```
 
 Start the stack:
@@ -316,7 +316,7 @@ Try the same prompt with both providers and compare:
 
 3. Gemini model is unavailable.
    Cause: configured model is not available for your account or API version.
-   Action: set `GEMINI_MODEL=gemini-2.0-flash` and retry.
+   Action: set `GEMINI_MODEL=gemini-3.6-flash` and retry.
 
 4. Gemini streams content but no metrics appear.
    Cause: backend was not restarted after the metrics change, or the provider did not return `usageMetadata`.

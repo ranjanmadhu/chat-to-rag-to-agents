@@ -38,6 +38,43 @@
         "panel": "dedicated",
         "clear": true
       }
+    },
+    {
+      "label": "Deploy Azure (dev-demo)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-File",
+        "scripts/azure/deploy.ps1",
+        "-EnvironmentName",
+        "dev",
+        "-Location",
+        "westeurope"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Teardown Azure (dev-demo)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-File",
+        "scripts/azure/teardown.ps1",
+        "-ResourceGroupName",
+        "rg-chatbot-dev",
+        "-Force"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
     }
   ]
 }

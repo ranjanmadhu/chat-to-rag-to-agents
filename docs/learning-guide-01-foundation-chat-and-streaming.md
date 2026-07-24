@@ -234,7 +234,7 @@ Why timeout matters:
 
 ## 11. Operational Runbook
 
-Use the run/setup instructions in [README.md](../README.md), then use this reliability sequence:
+Use the run/setup instructions in [README.md](README.md), then use this reliability sequence:
 
 1. Run `node scripts/setup-ollama.mjs`.
 2. Run `node scripts/start-dev-stack.mjs`.

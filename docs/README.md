@@ -2,7 +2,7 @@
 
 > A milestone-based, local-first learning journey for building a modern LLM-powered chatbot—from basic text chat to tools, retrieval-augmented generation, quality controls, memory, and early multi-agent patterns.
 
-![LLM Chatbot Learning Roadmap](docs/assets/llm-chatbot-learning-roadmap.png)
+![LLM Chatbot Learning Roadmap](assets/llm-chatbot-learning-roadmap.png)
 
 ## Quick Start
 
@@ -67,9 +67,10 @@ The objective is not only to build a chatbot. It is to understand how each capab
 
 | Phase | Phase Definition | Milestone | Capability | Learning Guide | Status |
 | --- | --- | --- | --- | --- | --- |
-| Phase 1 - Foundation | Build the smallest useful chatbot and improve responsiveness with streaming and cancellation. | 01 | Basic Text Chat | [Learning Guide 01](docs/learning-guide-01-foundation-chat-and-streaming.md) | Published |
-|  |  | 02 | Streaming Responses | [Learning Guide 01](docs/learning-guide-01-foundation-chat-and-streaming.md) | Published |
-|  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](docs/learning-guide-02-provider-switching-and-gemini.md) | Published |
+| Phase 1 - Foundation | Build the smallest useful chatbot and improve responsiveness with streaming and cancellation. | 01 | Basic Text Chat | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | Published |
+|  |  | 02 | Streaming Responses | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | Published |
+|  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md) | Published |
+|  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | Published |
 | Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | TBD | Planned |
 |  |  | 04 | Image Context | TBD | Planned |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | Planned |
@@ -100,6 +101,11 @@ The objective is not only to build a chatbot. It is to understand how each capab
 |  |  | 30 | RAG Ingestion Improvements | TBD | Planned |
 | Phase 8 - Early Multi-Agent Patterns | Introduce specialist routing, transparent planning, and controlled handoff. | 31 | Basic Multi-Agent Router | TBD | Planned |
 |  |  | 32 | Agent Planning and Handoff | TBD | Planned |
+
+Direct links for this stage:
+
+1. [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md)
+2. [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md)
 
 ## What You Will Learn
 
@@ -207,15 +213,17 @@ Gemini is optional. Use it when you want to compare the local Ollama path with a
 
 Create a `.env` file in the repository root. You can start from `.env.example`:
 
-	LLM_PROVIDER=ollama
+	LLM_PROVIDER=gemini
+	ENABLED_PROVIDERS=gemini,ollama
 	GEMINI_API_KEY=your-google-ai-studio-api-key
-	GEMINI_MODEL=gemini-2.0-flash
+	GEMINI_MODEL=gemini-3.6-flash
 
 Runtime behavior:
 
-1. `LLM_PROVIDER=ollama` keeps Ollama as the backend default.
-2. `LLM_PROVIDER=gemini` makes Gemini the backend default when the request does not specify a provider.
-3. The frontend provider picker sends `ollama` or `gemini` per request, so you can compare providers without restarting the UI.
+1. `LLM_PROVIDER=gemini` makes Gemini the backend default when the request does not specify a provider.
+2. `ENABLED_PROVIDERS=gemini,ollama` allows both providers locally.
+3. For cloud demo environments where Ollama is disabled, set `ENABLED_PROVIDERS=gemini`.
+4. The frontend provider picker sends `ollama` or `gemini` per request, so you can compare providers without restarting the UI.
 
 The backend reads Gemini settings from `.env`, environment variables, or `backend/src/Chatbot.Api/appsettings.json`.
 
@@ -262,6 +270,72 @@ Terminal 3 (Frontend):
 	cd frontend/chatbot-ui
 	npm start
 
+## Deploy to Azure (Ultra-Low-Cost Dev-Demo)
+
+This repository includes script-first Azure deployment with a dev-demo default cost profile:
+
+1. Static Web Apps Free for frontend
+2. App Service Free (F1) for backend
+3. Gemini default and Ollama disabled in deployed app settings
+4. Fixed resource group name: `rg-chatbot-dev` by default
+5. Stable app resource names derived from your subscription id by default
+6. Infrastructure deployment is skipped when the existing resources already match the current template state
+
+Prerequisites:
+
+1. Azure CLI (`az`)
+2. Active Azure login (`az login`) with the subscription you want selected
+3. .NET SDK 10
+4. Node.js and npm
+5. PowerShell
+
+From repository root:
+
+	powershell -ExecutionPolicy Bypass -File .\scripts\azure\deploy.ps1 -EnvironmentName dev -Location westeurope
+
+Optional custom resource group:
+
+	powershell -ExecutionPolicy Bypass -File .\scripts\azure\deploy.ps1 -ResourceGroupName rg-chatbot-dev -EnvironmentName dev -Location westeurope
+
+Teardown for a fresh redeploy (deletes resource group and everything inside it):
+
+	powershell -ExecutionPolicy Bypass -File .\scripts\azure\teardown.ps1 -ResourceGroupName rg-chatbot-dev -Force
+
+Gemini API key resolution order during deployment:
+
+1. `-GeminiApiKey` parameter if provided
+2. `GEMINI_API_KEY` in the repository `.env` file
+3. Interactive secure prompt
+
+Infrastructure deployment behavior:
+
+1. The script logs the active Azure subscription name, id, and tenant id.
+2. The script shows a deployment summary and waits for you to type `CONTINUE` before any Azure changes are made.
+3. The script reuses `rg-chatbot-dev` by default if it already exists.
+4. Backend and frontend resource names use a stable subscription-derived suffix by default to avoid global Azure name collisions.
+5. If the expected Azure resources already exist and the infra template state has not changed, the script skips infrastructure deployment and only deploys backend/frontend code.
+6. Use `-ForceInfrastructureDeployment` if you want to re-run infrastructure deployment explicitly.
+7. The frontend build is injected with the deployed backend API base URL so requests do not go to Static Web Apps `/api`.
+8. Backend CORS is configured during deployment to allow `https://<static-web-app-host>` and `http://localhost:4200`.
+
+Deployed API quick checks:
+
+1. `https://<backend-host>/` returns service metadata.
+2. `https://<backend-host>/healthz` returns health status.
+3. `https://<backend-host>/api/chat` expects POST; GET returns 405 by design.
+
+You can also run the VS Code task:
+
+1. Task: `Deploy Azure (dev-demo)`
+2. Task: `Teardown Azure (dev-demo)`
+
+For deployment details and profile behavior, see:
+
+1. [azure-deployment-plan.md](azure-deployment-plan.md)
+2. [scripts/azure/README.md](../scripts/azure/README.md)
+3. [learning-guide-02-provider-switching-and-gemini.md](./learning-guide-02-provider-switching-and-gemini.md)
+4. [learning-guide-02b-azure-deployment-and-safe-confirmation.md](./learning-guide-02b-azure-deployment-and-safe-confirmation.md)
+
 ### Common Troubleshooting
 
 1. Error NETSDK1045 (targeting net10.0 with older SDK)
@@ -291,7 +365,7 @@ Terminal 3 (Frontend):
    Restart the backend after pulling the latest code. Gemini metrics are read from `usageMetadata` and sent on the final SSE `done` event.
 
 7. Gemini model unavailable or unauthorized
-   Check that `GEMINI_MODEL` is available for your API key and account. Try `gemini-2.0-flash` first.
+   Check that `GEMINI_MODEL` is available for your API key and account. Try `gemini-3.6-flash` first.
 
 
 

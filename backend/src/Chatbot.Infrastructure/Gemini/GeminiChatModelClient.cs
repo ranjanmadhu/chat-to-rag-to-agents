@@ -50,12 +50,12 @@ public sealed class GeminiChatModelClient(
                 new ChatMessage("assistant", text),
                 BuildMetrics(body?.UsageMetadata, stopwatch.Elapsed));
         }
-        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
         {
             logger.LogWarning(ex, "Gemini request failed with status {StatusCode}.", ex.StatusCode);
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                $"Gemini request failed ({ex.StatusCode}). Check that the API key is valid and that the selected model is available for your account."));
+            $"Gemini request failed ({ex.StatusCode}). Check API key permissions, model availability, and Gemini quota/rate limits for this project."));
         }
         catch (Exception ex)
         {
@@ -109,10 +109,10 @@ public sealed class GeminiChatModelClient(
             response = await httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
         }
-        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
         {
             logger.LogWarning(ex, "Gemini streaming request failed with status {StatusCode}.", ex.StatusCode);
-            fallbackContent = $"Gemini request failed ({ex.StatusCode}). Check that the API key is valid and that the selected model is available for your account.";
+            fallbackContent = $"Gemini request failed ({ex.StatusCode}). Check API key permissions, model availability, and Gemini quota/rate limits for this project.";
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -187,7 +187,7 @@ public sealed class GeminiChatModelClient(
             Environment.GetEnvironmentVariable("GEMINI_MODEL"),
             Environment.GetEnvironmentVariable("GOOGLE_GEMINI_MODEL"),
             Environment.GetEnvironmentVariable("Gemini__Model"))
-            ?? "gemini-2.0-flash";
+            ?? "gemini-3.6-flash";
     }
 
     private static string ResolveRole(string role) => role.Equals("assistant", StringComparison.OrdinalIgnoreCase) ? "model" : "user";

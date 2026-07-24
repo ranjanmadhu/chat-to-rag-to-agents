@@ -49,7 +49,7 @@ public sealed class GeminiChatModelClientTests
             Options.Create(new GeminiOptions
             {
                 ApiKey = "test-key",
-                Model = "gemini-2.0-flash",
+                Model = "gemini-3.6-flash",
                 BaseUrl = "https://generativelanguage.googleapis.com"
             }),
             NullLogger<GeminiChatModelClient>.Instance);
@@ -58,7 +58,7 @@ public sealed class GeminiChatModelClientTests
 
         Assert.NotNull(capturedRequest);
         Assert.Equal(HttpMethod.Post, capturedRequest!.Method);
-        Assert.Contains("/v1beta/models/gemini-2.0-flash:generateContent", capturedRequest.RequestUri!.ToString());
+        Assert.Contains("/v1beta/models/gemini-3.6-flash:generateContent", capturedRequest.RequestUri!.ToString());
         Assert.Contains("key=test-key", capturedRequest.RequestUri!.Query);
         Assert.Equal("hello from gemini", result.Message.Content);
         Assert.Equal(3, result.Metrics?.InputTokens);
@@ -94,7 +94,7 @@ public sealed class GeminiChatModelClientTests
             Options.Create(new GeminiOptions
             {
                 ApiKey = "test-key",
-                Model = "gemini-2.0-flash",
+                Model = "gemini-3.6-flash",
                 BaseUrl = "https://generativelanguage.googleapis.com"
             }),
             NullLogger<GeminiChatModelClient>.Instance);
@@ -106,7 +106,7 @@ public sealed class GeminiChatModelClientTests
         }
 
         Assert.NotNull(capturedRequest);
-        Assert.Contains("/v1beta/models/gemini-2.0-flash:streamGenerateContent", capturedRequest!.RequestUri!.ToString());
+        Assert.Contains("/v1beta/models/gemini-3.6-flash:streamGenerateContent", capturedRequest!.RequestUri!.ToString());
         Assert.Contains("alt=sse", capturedRequest.RequestUri!.Query);
         Assert.Equal("hello from stream", string.Concat(chunks.Where(chunk => !chunk.IsDone).Select(chunk => chunk.Content)));
         Assert.True(chunks.Last().IsDone);
