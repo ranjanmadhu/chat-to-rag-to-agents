@@ -26,7 +26,7 @@ public sealed class OllamaChatModelClient(
         var resolvedModel = ResolveModel(model);
         var request = new OllamaChatRequest(
             resolvedModel,
-            messages.Select(message => new OllamaMessage(message.Role, message.Content)).ToArray(),
+            messages.Select(MapMessage).ToArray(),
             Stream: false);
 
         try
@@ -77,7 +77,7 @@ public sealed class OllamaChatModelClient(
         var resolvedModel = ResolveModel(model);
         var request = new OllamaChatRequest(
             resolvedModel,
-            messages.Select(message => new OllamaMessage(message.Role, message.Content)).ToArray(),
+            messages.Select(MapMessage).ToArray(),
             Stream: true);
 
         IAsyncEnumerable<ChatStreamChunk> stream;
@@ -193,6 +193,12 @@ public sealed class OllamaChatModelClient(
         return new ChatMetrics(inputTokens, outputTokens, tokensPerSecond);
     }
 
+    private static OllamaMessage MapMessage(ChatMessage message)
+    {
+        var images = message.Images?.Select(image => image.Base64Data).ToArray();
+        return new OllamaMessage(message.Role, message.Content, images);
+    }
+
     private sealed record OllamaChatRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] IReadOnlyCollection<OllamaMessage> Messages,
@@ -200,7 +206,10 @@ public sealed class OllamaChatModelClient(
 
     private sealed record OllamaMessage(
         [property: JsonPropertyName("role")] string Role,
-        [property: JsonPropertyName("content")] string Content);
+        [property: JsonPropertyName("content")] string Content,
+        [property: JsonPropertyName("images")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyCollection<string>? Images = null);
 
     private sealed record OllamaChatResponse(
         [property: JsonPropertyName("message")] OllamaMessage? Message,

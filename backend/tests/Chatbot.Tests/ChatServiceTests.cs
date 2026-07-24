@@ -45,6 +45,85 @@ public sealed class ChatServiceTests
         Assert.Equal("Context-aware response.", response.Message);
     }
 
+    [Fact]
+    public async Task SendAsync_Includes_Image_Context_When_Provided()
+    {
+        var imageBase64 = Convert.ToBase64String(new byte[] { 1, 2, 3, 4 });
+        var service = new ChatService(new StubChatModelClientFactory(
+            new StubChatModelClient(
+                "Image-aware response.",
+                messages =>
+                {
+                    var user = Assert.Single(messages.Where(message => message.Role == "user"));
+                    var image = Assert.Single(user.Images!);
+                    Assert.Equal("image/png", image.MimeType);
+                    Assert.Equal(imageBase64, image.Base64Data);
+                    Assert.Equal("chart.png", image.FileName);
+                })));
+
+        var response = await service.SendAsync(
+            new ChatRequest("Explain this chart", ContextImageBase64: imageBase64, ContextImageMimeType: "image/png", ContextImageFileName: "chart.png"),
+            CancellationToken.None);
+
+        Assert.Equal("Image-aware response.", response.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_Rejects_Incomplete_Image_Context()
+    {
+        var service = new ChatService(new StubChatModelClientFactory(new StubChatModelClient("Unused")));
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            service.SendAsync(
+                new ChatRequest("Hello", ContextImageBase64: "aGVsbG8="),
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SendAsync_Includes_Multiple_Image_Context_When_Provided()
+    {
+        var service = new ChatService(new StubChatModelClientFactory(
+            new StubChatModelClient(
+                "Multi-image response.",
+                messages =>
+                {
+                    var user = Assert.Single(messages.Where(message => message.Role == "user"));
+                    Assert.NotNull(user.Images);
+                    Assert.Equal(3, user.Images.Count);
+                })));
+
+        var request = new ChatRequest(
+            "Compare these screenshots",
+            ContextImages:
+            [
+                new ChatRequestImage("AQID", "image/png", "one.png"),
+                new ChatRequestImage("BAUG", "image/png", "two.png"),
+                new ChatRequestImage("BwgJ", "image/png", "three.png")
+            ]);
+
+        var response = await service.SendAsync(request, CancellationToken.None);
+        Assert.Equal("Multi-image response.", response.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_Rejects_More_Than_Four_Context_Images()
+    {
+        var service = new ChatService(new StubChatModelClientFactory(new StubChatModelClient("Unused")));
+
+        var request = new ChatRequest(
+            "Analyze",
+            ContextImages:
+            [
+                new ChatRequestImage("AQID", "image/png"),
+                new ChatRequestImage("BAUG", "image/png"),
+                new ChatRequestImage("BwgJ", "image/png"),
+                new ChatRequestImage("CgsM", "image/png"),
+                new ChatRequestImage("DQ4P", "image/png")
+            ]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SendAsync(request, CancellationToken.None));
+    }
+
     private sealed class StubChatModelClientFactory(IChatModelClient chatModelClient) : IChatModelClientFactory
     {
         public IChatModelClient Resolve(string? provider) => chatModelClient;
@@ -58,7 +137,7 @@ public sealed class ChatServiceTests
             CancellationToken cancellationToken)
         {
             validator?.Invoke(messages);
-            Assert.Contains(messages, message => message.Role == "user" && message.Content == "Hello");
+            Assert.Contains(messages, message => message.Role == "user" && !string.IsNullOrWhiteSpace(message.Content));
             return Task.FromResult(new ChatModelResponse(new ChatMessage("assistant", content), model ?? "stub-model"));
         }
 
@@ -69,7 +148,7 @@ public sealed class ChatServiceTests
             CancellationToken cancellationToken)
         {
             validator?.Invoke(messages);
-            Assert.Contains(messages, message => message.Role == "user" && message.Content == "Hello");
+            Assert.Contains(messages, message => message.Role == "user" && !string.IsNullOrWhiteSpace(message.Content));
             await Task.Yield();
             yield return new ChatStreamChunk(content, Model: model ?? "stub-model");
             yield return new ChatStreamChunk(string.Empty, IsDone: true, Model: model ?? "stub-model");

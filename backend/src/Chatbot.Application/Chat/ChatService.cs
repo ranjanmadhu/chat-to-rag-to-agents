@@ -9,6 +9,8 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
     private const string SystemRole = "system";
     private const string UserRole = "user";
     private const int MaxContextCharacters = 120_000;
+    private const int MaxImageBytes = 5 * 1024 * 1024;
+    private const int MaxContextImages = 4;
 
     public async Task<ChatResponse> SendAsync(ChatRequest request, CancellationToken cancellationToken)
     {
@@ -85,7 +87,107 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
                 $"Use the following context from {source} when answering the user. If the answer is not in this context, say so clearly.\n\n<context>\n{trimmedContext}\n</context>"));
         }
 
-        messages.Add(new ChatMessage(UserRole, request.Message.Trim()));
+        var imageAttachments = BuildImageAttachments(request);
+        messages.Add(new ChatMessage(
+            UserRole,
+            request.Message.Trim(),
+            imageAttachments.Count == 0 ? null : imageAttachments));
         return messages;
+    }
+
+    private static IReadOnlyCollection<ChatImageAttachment> BuildImageAttachments(ChatRequest request)
+    {
+        var attachments = new List<ChatImageAttachment>(capacity: MaxContextImages);
+
+        if (request.ContextImages is not null)
+        {
+            foreach (var image in request.ContextImages)
+            {
+                attachments.Add(BuildImageAttachment(image.Base64, image.MimeType, image.FileName, nameof(request)));
+            }
+        }
+
+        var hasAnyLegacyImageField =
+            !string.IsNullOrWhiteSpace(request.ContextImageBase64) ||
+            !string.IsNullOrWhiteSpace(request.ContextImageMimeType) ||
+            !string.IsNullOrWhiteSpace(request.ContextImageFileName);
+
+        if (hasAnyLegacyImageField)
+        {
+            attachments.Add(BuildImageAttachment(
+                request.ContextImageBase64,
+                request.ContextImageMimeType,
+                request.ContextImageFileName,
+                nameof(request)));
+        }
+
+        if (attachments.Count > MaxContextImages)
+        {
+            throw new ArgumentException(
+                $"Too many context images ({attachments.Count}). Limit is {MaxContextImages}.",
+                nameof(request));
+        }
+
+        return attachments;
+    }
+
+    private static ChatImageAttachment BuildImageAttachment(
+        string? base64,
+        string? mimeType,
+        string? fileName,
+        string argumentName)
+    {
+        if (string.IsNullOrWhiteSpace(base64) || string.IsNullOrWhiteSpace(mimeType))
+        {
+            throw new ArgumentException(
+                "Image context is incomplete. Provide both Base64 and MimeType.",
+                argumentName);
+        }
+
+        var normalizedMimeType = mimeType.Trim();
+        var normalizedBase64 = base64.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedBase64))
+        {
+            throw new ArgumentException("Image base64 data is required.", argumentName);
+        }
+
+        if (normalizedBase64.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var commaIndex = normalizedBase64.IndexOf(',');
+            if (commaIndex >= 0 && commaIndex < normalizedBase64.Length - 1)
+            {
+                normalizedBase64 = normalizedBase64[(commaIndex + 1)..];
+            }
+        }
+
+        var mimeTypeValue = normalizedMimeType;
+        if (!mimeTypeValue.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("ContextImageMimeType must be an image MIME type.", argumentName);
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(normalizedBase64);
+        }
+        catch (FormatException)
+        {
+            throw new ArgumentException("ContextImageBase64 is not valid base64.", argumentName);
+        }
+
+        if (bytes.Length > MaxImageBytes)
+        {
+            throw new ArgumentException(
+                $"Image context is too large ({bytes.Length} bytes). Limit is {MaxImageBytes} bytes.",
+                argumentName);
+        }
+
+        var resolvedFileName = string.IsNullOrWhiteSpace(fileName)
+            ? "uploaded-image"
+            : fileName.Trim();
+
+        return new ChatImageAttachment(mimeTypeValue, normalizedBase64, resolvedFileName);
     }
 }

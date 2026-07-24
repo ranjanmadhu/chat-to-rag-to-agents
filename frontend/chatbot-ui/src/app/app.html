@@ -95,6 +95,24 @@
                   <span>{{ message.contextFileName }}</span>
                 </div>
               }
+              @if (message.contextImages && message.contextImages.length > 0) {
+                <div class="message-image-gallery">
+                  @for (image of message.contextImages; track image.previewUrl; let imageIndex = $index) {
+                    <figure class="message-image-preview">
+                      <button
+                        type="button"
+                        class="image-preview-button"
+                        [attr.aria-label]="'Open image preview for ' + (image.fileName || 'attached image')"
+                        [attr.title]="'Open preview: ' + (image.fileName || 'Attached image')"
+                        (click)="openMessageImageDialog(message.contextImages || [], imageIndex)"
+                      >
+                        <img [src]="image.previewUrl" [alt]="image.fileName || 'Attached image'" />
+                      </button>
+                      <figcaption>{{ image.fileName || 'Attached image' }}</figcaption>
+                    </figure>
+                  }
+                </div>
+              }
               <p>{{ message.content }}</p>
             }
           </section>
@@ -111,20 +129,68 @@
         (change)="onContextFileSelected($event)"
       />
 
+      <input
+        #imageFileInput
+        type="file"
+        class="hidden-context-input"
+        accept="image/*"
+        multiple
+        (change)="onImageFileSelected($event)"
+      />
+
       @if (hasContext()) {
-        <div class="context-pill" role="status">
-          <span class="context-pill-label">Context:</span>
-          <span class="context-pill-name">{{ contextFileName() }}</span>
-          <button
-            mat-icon-button
-            type="button"
-            class="context-pill-remove"
-            aria-label="Remove attached context file"
-            title="Remove context"
-            (click)="clearContextFile()"
-          >
-            <mat-icon>close</mat-icon>
-          </button>
+        <div class="context-pill-row" role="status">
+          @if (hasTextContext()) {
+            <div class="context-pill">
+              <span class="context-pill-label">Text</span>
+              <span class="context-pill-name">{{ contextFileName() }}</span>
+              <button
+                mat-icon-button
+                type="button"
+                class="context-pill-remove"
+                aria-label="Remove attached context file"
+                title="Remove text context"
+                (click)="clearContextFile()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
+
+          @if (hasImageContext()) {
+            <div class="context-pill image-pill">
+              <span class="context-pill-label">Images</span>
+              <span class="context-pill-name">{{ imageContextCount() }} attached</span>
+              <button
+                mat-icon-button
+                type="button"
+                class="context-pill-remove"
+                aria-label="Remove attached image"
+                title="Remove image context"
+                (click)="clearImageContext()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+
+            <div class="context-thumb-row">
+              @for (image of contextImages(); track image.previewUrl; let imageIndex = $index) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  class="context-thumb"
+                  [attr.aria-label]="'Remove image ' + (image.fileName || ('#' + (imageIndex + 1)))"
+                  [attr.title]="'Remove ' + (image.fileName || 'image')"
+                  (click)="removeImageContextAt(imageIndex)"
+                >
+                  <img [src]="image.previewUrl" [alt]="image.fileName || 'Attached image'" />
+                  <span class="context-thumb-overlay">
+                    <mat-icon>close</mat-icon>
+                  </span>
+                </button>
+              }
+            </div>
+          }
         </div>
       }
 
@@ -132,17 +198,38 @@
         <div class="context-error" role="status">{{ contextError() }}</div>
       }
 
-      <div class="composer-shell">
-        <button
-          mat-icon-button
-          type="button"
-          class="composer-icon"
-          aria-label="Add text file context"
-          title="Add text file context"
-          (click)="openContextFilePicker(contextFileInput)"
-        >
-          <mat-icon>add</mat-icon>
-        </button>
+      <div
+        class="composer-shell"
+        [class.drag-over]="isDragOverComposer()"
+        (dragover)="onComposerDragOver($event)"
+        (dragleave)="onComposerDragLeave($event)"
+        (drop)="onComposerDrop($event)"
+      >
+        <div class="composer-context-actions">
+          <button
+            mat-icon-button
+            type="button"
+            class="composer-icon"
+            aria-label="Add text file context"
+            title="Add text file context"
+            (click)="openContextFilePicker(contextFileInput)"
+          >
+            <mat-icon>add</mat-icon>
+          </button>
+
+          @if (isImageContextSupported()) {
+            <button
+              mat-icon-button
+              type="button"
+              class="composer-icon"
+              aria-label="Add image context"
+              title="Add image context"
+              (click)="openImageFilePicker(imageFileInput)"
+            >
+              <mat-icon>image</mat-icon>
+            </button>
+          }
+        </div>
 
         <textarea
           class="composer-textarea"
@@ -153,6 +240,7 @@
           [placeholder]="isSwitchingModel() ? 'Waiting for model warmup...' : 'Ask anything'"
           aria-label="Message"
           [disabled]="isSwitchingModel()"
+          (paste)="onComposerPaste($event)"
         ></textarea>
 
         <button
@@ -168,4 +256,63 @@
       </div>
     </form>
   </section>
+
+  @if (isImageDialogOpen()) {
+    <div class="image-dialog-backdrop" (click)="closeImageDialog()"></div>
+    <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="activeDialogImage()?.fileName || 'Image preview'" tabindex="0" (keydown)="onImageDialogKeydown($event)">
+      <button
+        type="button"
+        class="image-dialog-close"
+        aria-label="Close image preview"
+        title="Close"
+        (click)="closeImageDialog()"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+
+      <div class="image-dialog-nav-row">
+        <button
+          type="button"
+          class="image-dialog-nav"
+          aria-label="Previous image"
+          title="Previous image"
+          [disabled]="dialogImages().length < 2"
+          (click)="showPreviousDialogImage()"
+        >
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+
+        <img [src]="activeDialogImage()?.previewUrl" [alt]="activeDialogImage()?.fileName || 'Image preview'" />
+
+        <button
+          type="button"
+          class="image-dialog-nav"
+          aria-label="Next image"
+          title="Next image"
+          [disabled]="dialogImages().length < 2"
+          (click)="showNextDialogImage()"
+        >
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+
+      <div class="image-dialog-caption">{{ activeDialogImage()?.fileName || 'Attached image' }}</div>
+
+      @if (dialogImages().length > 1) {
+        <div class="image-dialog-thumb-strip">
+          @for (image of dialogImages(); track image.previewUrl; let dialogIndex = $index) {
+            <button
+              type="button"
+              class="image-dialog-thumb"
+              [class.active]="dialogIndex === dialogImageIndex()"
+              [attr.aria-label]="'Show image ' + (dialogIndex + 1)"
+              (click)="setDialogImageIndex(dialogIndex)"
+            >
+              <img [src]="image.previewUrl" [alt]="image.fileName || ('Image ' + (dialogIndex + 1))" />
+            </button>
+          }
+        </div>
+      }
+    </div>
+  }
 </main>
