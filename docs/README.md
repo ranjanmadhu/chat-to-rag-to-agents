@@ -67,43 +67,46 @@ The objective is not only to build a chatbot. It is to understand how each capab
 
 ## Learning Roadmap
 
-| Phase | Phase Definition | Milestone | Capability | Learning Guide | Status |
-| --- | --- | --- | --- | --- | --- |
-| Phase 1 - Foundation | Build the smallest useful chatbot and improve responsiveness with streaming and cancellation. | 01 | Basic Text Chat | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | Published |
-|  |  | 02 | Streaming Responses | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | Published |
-|  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md) | Published |
-|  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | Published |
-|  |  | 02C | Ollama Model Management, Warmup, and Dynamic Capabilities | [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md) | Published |
-| Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | [Learning Guide 03](./learning-guide-03-text-file-context.md) | Published |
-|  |  | 04 | Image Context | [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md) | Published |
-| Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | Planned |
-|  |  | 06 | External Tools | TBD | Planned |
-|  |  | 07 | Private Business API Tools | TBD | Planned |
-|  |  | 08 | Multi-Tool Calling | TBD | Planned |
-| Phase 4 - Safety, Reliability, and Control | Introduce approval boundaries, retries, observability, and generation controls. | 09 | Human Approval Tools | TBD | Planned |
-|  |  | 10 | Tool Errors and Retries | TBD | Planned |
-|  |  | 11 | Observability | TBD | Planned |
-|  |  | 12 | Model Generation Settings | TBD | Planned |
-| Phase 5 - Knowledge Hubs and Retrieval | Create reusable document collections, chunk/vectorize content, and inspect semantic search. | 13 | Document Vectorization | TBD | Planned |
-|  |  | 14 | Qdrant Vector Search | TBD | Planned |
-| Phase 6 - Core RAG Experience | Connect retrieval to chat, inspect context, evaluate retrieval, and add citations. | 15 | Basic RAG Chat | TBD | Planned |
-|  |  | 16 | RAG Observability | TBD | Planned |
-|  |  | 17 | RAG Tuning Playground | TBD | Planned |
-|  |  | 18 | RAG Evaluation Basics | TBD | Planned |
-|  |  | 19 | RAG Debug Inspector | TBD | Planned |
-|  |  | 20 | Document Management Improvements | TBD | Planned |
-|  |  | 21 | RAG Citations | TBD | Planned |
-| Phase 7 - RAG Quality, Memory, and Tuning | Improve recall, ranking, grounding, citation quality, follow-up memory, and prompt control. | 22 | RAG Query Rewriting | TBD | Planned |
-|  |  | 23 | RAG Reranking | TBD | Planned |
-|  |  | 24 | RAG Hybrid Search | TBD | Planned |
-|  |  | 25 | RAG Query Expansion | TBD | Planned |
-|  |  | 26 | RAG Answer Grounding Check | TBD | Planned |
-|  |  | 27 | RAG Citation Quality | TBD | Planned |
-|  |  | 28 | RAG Conversation Memory | TBD | Planned |
-|  |  | 29 | RAG Prompt Templates | TBD | Planned |
-|  |  | 30 | RAG Ingestion Improvements | TBD | Planned |
-| Phase 8 - Early Multi-Agent Patterns | Introduce specialist routing, transparent planning, and controlled handoff. | 31 | Basic Multi-Agent Router | TBD | Planned |
-|  |  | 32 | Agent Planning and Handoff | TBD | Planned |
+| Phase | Phase Definition | Milestone | Capability | Learning Guide | Release | Diff |
+| --- | --- | --- | --- | --- | --- | --- |
+| Phase 1 - Foundation | Build the smallest useful chatbot and improve responsiveness with streaming and cancellation. | 01 | Basic Text Chat | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | [0.1.0](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.0) | [PR #1 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/1/changes) |
+|  |  | 02 | Streaming Responses | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | [0.1.0](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.0) | [PR #1 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/1/changes) |
+|  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md) | [0.1.1](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.1) | [PR #2 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/2/changes) |
+|  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | [0.1.2](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.2) | [PR #3 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/3/changes) |
+|  |  | 02C | Ollama Model Management, Warmup, and Dynamic Capabilities | [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md) | [0.1.3](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.1.3) | [PR #4 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/4/changes) |
+| Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | [Learning Guide 03](./learning-guide-03-text-file-context.md) | [0.2.0](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.0) | [PR #5 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/5/changes) |
+|  |  | 04 | Image Context | [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md) | [0.2.1](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.1) | [PR #6 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/6/changes) |
+| Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | TBD | TBD |
+|  |  | 06 | External Tools | TBD | TBD | TBD |
+|  |  | 07 | Private Business API Tools | TBD | TBD | TBD |
+|  |  | 08 | Multi-Tool Calling | TBD | TBD | TBD |
+| Phase 4 - Safety, Reliability, and Control | Introduce approval boundaries, retries, observability, and generation controls. | 09 | Human Approval Tools | TBD | TBD | TBD |
+|  |  | 10 | Tool Errors and Retries | TBD | TBD | TBD |
+|  |  | 11 | Observability | TBD | TBD | TBD |
+|  |  | 12 | Model Generation Settings | TBD | TBD | TBD |
+| Phase 5 - Knowledge Hubs and Retrieval | Create reusable document collections, chunk/vectorize content, and inspect semantic search. | 13 | Document Vectorization | TBD | TBD | TBD |
+|  |  | 14 | Qdrant Vector Search | TBD | TBD | TBD |
+| Phase 6 - Core RAG Experience | Connect retrieval to chat, inspect context, evaluate retrieval, and add citations. | 15 | Basic RAG Chat | TBD | TBD | TBD |
+|  |  | 16 | RAG Observability | TBD | TBD | TBD |
+|  |  | 17 | RAG Tuning Playground | TBD | TBD | TBD |
+|  |  | 18 | RAG Evaluation Basics | TBD | TBD | TBD |
+|  |  | 19 | RAG Debug Inspector | TBD | TBD | TBD |
+|  |  | 20 | Document Management Improvements | TBD | TBD | TBD |
+|  |  | 21 | RAG Citations | TBD | TBD | TBD |
+| Phase 7 - RAG Quality, Memory, and Tuning | Improve recall, ranking, grounding, citation quality, follow-up memory, and prompt control. | 22 | RAG Query Rewriting | TBD | TBD | TBD |
+|  |  | 23 | RAG Reranking | TBD | TBD | TBD |
+|  |  | 24 | RAG Hybrid Search | TBD | TBD | TBD |
+|  |  | 25 | RAG Query Expansion | TBD | TBD | TBD |
+|  |  | 26 | RAG Answer Grounding Check | TBD | TBD | TBD |
+|  |  | 27 | RAG Citation Quality | TBD | TBD | TBD |
+|  |  | 28 | RAG Conversation Memory | TBD | TBD | TBD |
+|  |  | 29 | RAG Prompt Templates | TBD | TBD | TBD |
+|  |  | 30 | RAG Ingestion Improvements | TBD | TBD | TBD |
+| Phase 8 - Early Multi-Agent Patterns | Introduce specialist routing, transparent planning, and controlled handoff. | 31 | Basic Multi-Agent Router | TBD | TBD | TBD |
+|  |  | 32 | Agent Planning and Handoff | TBD | TBD | TBD |
+
+Use the Release link for milestone summary and outcome context.
+Use the PR diff link when you want exact file-level implementation changes.
 
 Direct links for this stage:
 
