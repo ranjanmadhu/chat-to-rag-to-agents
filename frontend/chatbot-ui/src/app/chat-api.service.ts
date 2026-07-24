@@ -8,11 +8,22 @@ export interface ChatRequest {
   model?: string;
   contextText?: string;
   contextFileName?: string;
+  contextImages?: ImageContext[];
+  contextImageBase64?: string;
+  contextImageMimeType?: string;
+  contextImageFileName?: string;
+}
+
+export interface ImageContext {
+  base64: string;
+  mimeType: string;
+  fileName?: string;
 }
 
 export interface TextFileContext {
-  text: string;
-  fileName: string;
+  text?: string;
+  fileName?: string;
+  images?: ImageContext[];
 }
 
 export interface ChatResponse {
@@ -64,7 +75,8 @@ export class ChatApiService {
       provider,
       model,
       contextText: context?.text,
-      contextFileName: context?.fileName
+      contextFileName: context?.fileName,
+      contextImages: context?.images
     } satisfies ChatRequest);
   }
 
@@ -86,7 +98,8 @@ export class ChatApiService {
         provider,
         model,
         contextText: context?.text,
-        contextFileName: context?.fileName
+        contextFileName: context?.fileName,
+        contextImages: context?.images
       } satisfies ChatRequest)
     });
 

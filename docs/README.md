@@ -75,7 +75,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 |  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | Published |
 |  |  | 02C | Ollama Model Management, Warmup, and Dynamic Capabilities | [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md) | Published |
 | Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | [Learning Guide 03](./learning-guide-03-text-file-context.md) | Published |
-|  |  | 04 | Image Context | TBD | Planned |
+|  |  | 04 | Image Context | [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md) | Published |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | Planned |
 |  |  | 06 | External Tools | TBD | Planned |
 |  |  | 07 | Private Business API Tools | TBD | Planned |
@@ -111,6 +111,27 @@ Direct links for this stage:
 2. [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md)
 3. [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md)
 4. [Learning Guide 03](./learning-guide-03-text-file-context.md)
+5. [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md)
+
+Phase 2 Milestone 04 quick demo steps:
+
+1. Start the full stack from repo root:
+
+	node scripts/start-dev-stack.mjs
+
+2. Open the frontend at http://localhost:4200 and keep provider as Gemini (or choose an Ollama model that supports image).
+3. Attach 2 to 4 images using any path:
+	- image button in composer
+	- drag and drop onto composer
+	- Ctrl+V paste image from clipboard
+4. Type a question that compares the images and send it.
+5. Confirm the user message shows a mini image gallery.
+6. Click a gallery image to open the preview dialog, then test:
+	- previous/next navigation
+	- thumbnail strip selection
+	- Escape and backdrop close
+7. Send a second message and verify context is cleared (no images attached unless you add them again).
+8. Optional capability gate check: switch to a text-only Ollama model and verify image attach is blocked.
 
 ## What You Will Learn
 

@@ -3,6 +3,7 @@ using Chatbot.Domain;
 using Chatbot.Infrastructure.Gemini;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace Chatbot.Tests;
 
@@ -113,6 +114,69 @@ public sealed class GeminiChatModelClientTests
         Assert.Equal(4, chunks.Last().Metrics?.InputTokens);
         Assert.Equal(6, chunks.Last().Metrics?.OutputTokens);
         Assert.True(chunks.Last().Metrics?.OutputTokensPerSecond > 0);
+    }
+
+    [Fact]
+    public async Task SendAsync_Serializes_Image_Attachments_As_InlineData()
+    {
+        HttpRequestMessage? capturedRequest = null;
+
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            capturedRequest = request;
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                {
+                  "candidates": [
+                    {
+                      "content": {
+                        "parts": [
+                          { "text": "image understood" }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """)
+            });
+        });
+
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://generativelanguage.googleapis.com")
+        };
+        var client = new GeminiChatModelClient(
+            httpClient,
+            Options.Create(new GeminiOptions
+            {
+                ApiKey = "test-key",
+                Model = "gemini-3.6-flash",
+                BaseUrl = "https://generativelanguage.googleapis.com"
+            }),
+            NullLogger<GeminiChatModelClient>.Instance);
+
+        _ = await client.SendAsync(
+            new[]
+            {
+                new ChatMessage(
+                    "user",
+                    "What is in this image?",
+                    new[] { new ChatImageAttachment("image/png", "AQIDBA==", "photo.png") })
+            },
+            null,
+            CancellationToken.None);
+
+        Assert.NotNull(capturedRequest);
+        var body = await capturedRequest!.Content!.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(body);
+        var firstPart = json.RootElement
+            .GetProperty("contents")[0]
+            .GetProperty("parts")[1]
+            .GetProperty("inlineData");
+
+        Assert.Equal("image/png", firstPart.GetProperty("mimeType").GetString());
+        Assert.Equal("AQIDBA==", firstPart.GetProperty("data").GetString());
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler

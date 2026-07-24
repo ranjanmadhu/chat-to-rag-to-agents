@@ -37,9 +37,7 @@ public sealed class GeminiChatModelClient(
         try
         {
             var request = new GeminiGenerateContentRequest(
-                messages.Select(message => new GeminiContent(
-                    ResolveRole(message.Role),
-                    new[] { new GeminiPart(message.Content) })).ToArray());
+                messages.Select(MapMessageToContent).ToArray());
 
             var requestUri = $"/v1beta/models/{resolvedModel}:generateContent?key={Uri.EscapeDataString(apiKey)}";
             var stopwatch = Stopwatch.StartNew();
@@ -88,9 +86,7 @@ public sealed class GeminiChatModelClient(
         }
 
         var request = new GeminiGenerateContentRequest(
-            messages.Select(message => new GeminiContent(
-                ResolveRole(message.Role),
-                new[] { new GeminiPart(message.Content) })).ToArray());
+            messages.Select(MapMessageToContent).ToArray());
 
         await foreach (var chunk in StreamFromGeminiAsync(request, model, cancellationToken))
         {
@@ -249,6 +245,27 @@ public sealed class GeminiChatModelClient(
             outputTokensPerSecond);
     }
 
+    private static GeminiContent MapMessageToContent(ChatMessage message)
+    {
+        var parts = new List<GeminiPart>(capacity: 1 + (message.Images?.Count ?? 0));
+
+        if (!string.IsNullOrWhiteSpace(message.Content))
+        {
+            parts.Add(new GeminiPart(Text: message.Content));
+        }
+
+        if (message.Images is not null)
+        {
+            foreach (var image in message.Images)
+            {
+                parts.Add(new GeminiPart(
+                    InlineData: new GeminiInlineData(image.MimeType, image.Base64Data)));
+            }
+        }
+
+        return new GeminiContent(ResolveRole(message.Role), parts);
+    }
+
     private static string FirstNonEmpty(params string?[] values)
     {
         foreach (var value in values)
@@ -270,7 +287,16 @@ public sealed class GeminiChatModelClient(
         [property: JsonPropertyName("parts")] IReadOnlyCollection<GeminiPart> Parts);
 
     private sealed record GeminiPart(
-        [property: JsonPropertyName("text")] string Text);
+        [property: JsonPropertyName("text")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? Text = null,
+        [property: JsonPropertyName("inlineData")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        GeminiInlineData? InlineData = null);
+
+    private sealed record GeminiInlineData(
+        [property: JsonPropertyName("mimeType")] string MimeType,
+        [property: JsonPropertyName("data")] string Data);
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
