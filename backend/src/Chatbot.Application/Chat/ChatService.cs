@@ -21,14 +21,14 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
         };
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
-        var response = await chatModelClient.SendAsync(messages, cancellationToken);
+        var response = await chatModelClient.SendAsync(messages, request.Model, cancellationToken);
         var content = string.IsNullOrWhiteSpace(response.Message.Content)
             ? "The model returned an empty response."
             : response.Message.Content.Trim();
 
         return new ChatResponse(
             content,
-            response.Message.Role == AssistantRole ? "ollama" : response.Message.Role,
+            response.Model,
             response.Metrics);
     }
 
@@ -48,7 +48,7 @@ public sealed class ChatService(IChatModelClientFactory chatModelClientFactory)
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
 
-        await foreach (var responseChunk in chatModelClient.StreamAsync(messages, cancellationToken)
+        await foreach (var responseChunk in chatModelClient.StreamAsync(messages, request.Model, cancellationToken)
                            .WithCancellation(cancellationToken))
         {
             if (responseChunk.IsDone)

@@ -18,10 +18,14 @@ public sealed class OllamaChatModelClient(
     private const double NanosecondsPerSecond = 1_000_000_000d;
     private readonly OllamaOptions _options = options.Value;
 
-    public async Task<ChatModelResponse> SendAsync(IReadOnlyCollection<ChatMessage> messages, CancellationToken cancellationToken)
+    public async Task<ChatModelResponse> SendAsync(
+        IReadOnlyCollection<ChatMessage> messages,
+        string? model,
+        CancellationToken cancellationToken)
     {
+        var resolvedModel = ResolveModel(model);
         var request = new OllamaChatRequest(
-            _options.ChatModel,
+            resolvedModel,
             messages.Select(message => new OllamaMessage(message.Role, message.Content)).ToArray(),
             Stream: false);
 
@@ -33,15 +37,17 @@ public sealed class OllamaChatModelClient(
             var body = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
             return new ChatModelResponse(
                 new ChatMessage("assistant", body?.Message?.Content ?? string.Empty),
+                resolvedModel,
                 BuildMetrics(body?.PromptEvalCount, body?.EvalCount, body?.EvalDuration));
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            logger.LogWarning(ex, "Configured Ollama model {Model} was not found.", _options.ChatModel);
+            logger.LogWarning(ex, "Configured Ollama model {Model} was not found.", resolvedModel);
 
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                $"The configured Ollama model '{_options.ChatModel}' was not found. Pull it with `ollama pull {_options.ChatModel}` or update appsettings to a model you already have."));
+                $"The configured Ollama model '{resolvedModel}' was not found. Pull it with `ollama pull {resolvedModel}` or update appsettings to a model you already have."),
+                resolvedModel);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -49,7 +55,8 @@ public sealed class OllamaChatModelClient(
 
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                $"Ollama took too long to respond (timeout: {_options.RequestTimeoutSeconds}s). Try a smaller model, ask for a shorter answer, or increase Ollama:RequestTimeoutSeconds in appsettings."));
+                $"Ollama took too long to respond (timeout: {_options.RequestTimeoutSeconds}s). Try a smaller model, ask for a shorter answer, or increase Ollama:RequestTimeoutSeconds in appsettings."),
+                resolvedModel);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -57,16 +64,19 @@ public sealed class OllamaChatModelClient(
 
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                "Ollama is not reachable yet. Start it with `ollama serve`, pull the configured model, then ask again."));
+                "Ollama is not reachable yet. Start it with `ollama serve`, pull the configured model, then ask again."),
+                resolvedModel);
         }
     }
 
     public async IAsyncEnumerable<ChatStreamChunk> StreamAsync(
         IReadOnlyCollection<ChatMessage> messages,
+        string? model,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var resolvedModel = ResolveModel(model);
         var request = new OllamaChatRequest(
-            _options.ChatModel,
+            resolvedModel,
             messages.Select(message => new OllamaMessage(message.Role, message.Content)).ToArray(),
             Stream: true);
 
@@ -74,25 +84,28 @@ public sealed class OllamaChatModelClient(
 
         try
         {
-            stream = StreamFromOllamaAsync(request, cancellationToken);
+            stream = StreamFromOllamaAsync(request, resolvedModel, cancellationToken);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            logger.LogWarning(ex, "Configured Ollama model {Model} was not found.", _options.ChatModel);
+            logger.LogWarning(ex, "Configured Ollama model {Model} was not found.", resolvedModel);
             stream = SingleMessageAsync(
-                $"The configured Ollama model '{_options.ChatModel}' was not found. Pull it with `ollama pull {_options.ChatModel}` or update appsettings to a model you already have.");
+                $"The configured Ollama model '{resolvedModel}' was not found. Pull it with `ollama pull {resolvedModel}` or update appsettings to a model you already have.",
+                resolvedModel);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Ollama stream timed out after {TimeoutSeconds}s.", _options.RequestTimeoutSeconds);
             stream = SingleMessageAsync(
-                $"Ollama took too long to respond (timeout: {_options.RequestTimeoutSeconds}s). Try a smaller model, ask for a shorter answer, or increase Ollama:RequestTimeoutSeconds in appsettings.");
+                $"Ollama took too long to respond (timeout: {_options.RequestTimeoutSeconds}s). Try a smaller model, ask for a shorter answer, or increase Ollama:RequestTimeoutSeconds in appsettings.",
+                resolvedModel);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             logger.LogWarning(ex, "Ollama stream is unavailable.");
             stream = SingleMessageAsync(
-                "Ollama is not reachable yet. Start it with `ollama serve`, pull the configured model, then ask again.");
+                "Ollama is not reachable yet. Start it with `ollama serve`, pull the configured model, then ask again.",
+                resolvedModel);
         }
 
         await foreach (var chunk in stream.WithCancellation(cancellationToken))
@@ -103,6 +116,7 @@ public sealed class OllamaChatModelClient(
 
     private async IAsyncEnumerable<ChatStreamChunk> StreamFromOllamaAsync(
         OllamaChatRequest request,
+        string model,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/chat")
@@ -136,7 +150,7 @@ public sealed class OllamaChatModelClient(
             var chunk = JsonSerializer.Deserialize<OllamaStreamChatResponse>(line);
             if (!string.IsNullOrEmpty(chunk?.Message?.Content))
             {
-                yield return new ChatStreamChunk(chunk.Message.Content);
+                yield return new ChatStreamChunk(chunk.Message.Content, Model: model);
             }
 
             if (chunk?.Done == true)
@@ -144,16 +158,23 @@ public sealed class OllamaChatModelClient(
                 yield return new ChatStreamChunk(
                     string.Empty,
                     IsDone: true,
+                    Model: model,
                     Metrics: BuildMetrics(chunk.PromptEvalCount, chunk.EvalCount, chunk.EvalDuration));
                 yield break;
             }
         }
     }
 
-    private static async IAsyncEnumerable<ChatStreamChunk> SingleMessageAsync(string content)
+    private static async IAsyncEnumerable<ChatStreamChunk> SingleMessageAsync(string content, string model)
     {
         await Task.Yield();
-        yield return new ChatStreamChunk(content);
+        yield return new ChatStreamChunk(content, Model: model);
+        yield return new ChatStreamChunk(string.Empty, IsDone: true, Model: model);
+    }
+
+    private string ResolveModel(string? requestModel)
+    {
+        return string.IsNullOrWhiteSpace(requestModel) ? _options.ChatModel : requestModel.Trim();
     }
 
     private static ChatMetrics? BuildMetrics(int? inputTokens, int? outputTokens, long? evalDurationNs)

@@ -14,8 +14,19 @@ public static class DependencyInjection
         services.Configure<OllamaOptions>(configuration.GetSection("Ollama"));
         services.Configure<GeminiOptions>(configuration.GetSection("Gemini"));
         services.AddSingleton<IChatModelClientFactory, ChatModelClientFactory>();
+        services.AddSingleton<IOllamaWarmupState, OllamaWarmupState>();
 
         services.AddHttpClient<OllamaChatModelClient>((serviceProvider, httpClient) =>
+        {
+            var options = serviceProvider
+                .GetRequiredService<IOptions<OllamaOptions>>()
+                .Value;
+
+            httpClient.BaseAddress = new Uri(options.BaseUrl);
+            httpClient.Timeout = TimeSpan.FromSeconds(Math.Max(10, options.RequestTimeoutSeconds));
+        });
+
+        services.AddHttpClient<IOllamaModelAdminClient, OllamaModelAdminClient>((serviceProvider, httpClient) =>
         {
             var options = serviceProvider
                 .GetRequiredService<IOptions<OllamaOptions>>()

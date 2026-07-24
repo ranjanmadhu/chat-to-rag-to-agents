@@ -2,6 +2,8 @@
 
 > A milestone-based, local-first learning journey for building a modern LLM-powered chatbot—from basic text chat to tools, retrieval-augmented generation, quality controls, memory, and early multi-agent patterns.
 
+<a href="https://markdownstudio.anglebrackets.app/?github=https://github.com/ranjanmadhu/chat-to-rag-to-agents/tree/main/docs" target="_blank" rel="noopener noreferrer">Open This Docs Hub in Markdown Studio</a>
+
 ![LLM Chatbot Learning Roadmap](assets/llm-chatbot-learning-roadmap.png)
 
 ## Quick Start
@@ -71,6 +73,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 |  |  | 02 | Streaming Responses | [Learning Guide 01](./learning-guide-01-foundation-chat-and-streaming.md) | Published |
 |  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md) | Published |
 |  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | Published |
+|  |  | 02C | Ollama Model Management, Warmup, and Dynamic Capabilities | [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md) | Published |
 | Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | TBD | Planned |
 |  |  | 04 | Image Context | TBD | Planned |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | Planned |
@@ -106,6 +109,7 @@ Direct links for this stage:
 
 1. [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md)
 2. [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md)
+3. [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md)
 
 ## What You Will Learn
 
@@ -195,13 +199,20 @@ The repository includes a setup script that:
 
 1. Installs Ollama if it is missing (Windows)
 2. Starts Ollama if it is not running
-3. Pulls configured models if they are not present
+3. Pulls the configured model and tutorial model set if they are not present
 
 Run from repository root:
 
 	node scripts/setup-ollama.mjs
 
-By default, it checks the model configured in backend/src/Chatbot.Api/appsettings.json and also pulls the embedding model used in later milestones.
+By default, it checks the model configured in backend/src/Chatbot.Api/appsettings.json and also pulls the tutorial baseline set used in this stage:
+
+1. deepseek-r1:1.5b
+2. gemma2:2b
+3. phi3:mini
+4. llama3.2:1b
+5. llama3.2:3b
+6. nomic-embed-text:latest
 
 You can also provide models explicitly:
 

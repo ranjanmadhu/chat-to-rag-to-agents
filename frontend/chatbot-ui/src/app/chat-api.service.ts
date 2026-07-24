@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 export interface ChatRequest {
   message: string;
   provider?: string;
+  model?: string;
 }
 
 export interface ChatResponse {
@@ -23,11 +24,21 @@ interface StreamPayload {
   content?: string;
   error?: string;
   metrics?: ChatMetrics;
+  model?: string;
 }
 
 interface StreamHandlers {
   onChunk: (chunk: string) => void;
-  onDone?: (metrics?: ChatMetrics) => void;
+  onDone?: (metrics?: ChatMetrics, model?: string) => void;
+}
+
+export interface OllamaModelOption {
+  model: string;
+  label: string;
+  supportsText: boolean;
+  supportsImage: boolean;
+  isInstalled: boolean;
+  isRecommended: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -35,21 +46,31 @@ export class ChatApiService {
   private readonly http = inject(HttpClient);
   private readonly apiBaseUrl = this.resolveApiBaseUrl();
 
-  sendMessage(message: string, provider?: string): Observable<ChatResponse> {
-    return this.http.post<ChatResponse>(`${this.apiBaseUrl}/chat`, { message, provider } satisfies ChatRequest);
+  sendMessage(message: string, provider?: string, model?: string): Observable<ChatResponse> {
+    return this.http.post<ChatResponse>(`${this.apiBaseUrl}/chat`, { message, provider, model } satisfies ChatRequest);
   }
 
-  async streamMessage(message: string, provider: string | undefined, handlers: StreamHandlers): Promise<void> {
+  async streamMessage(
+    message: string,
+    provider: string | undefined,
+    model: string | undefined,
+    handlers: StreamHandlers
+  ): Promise<void> {
     const response = await fetch(`${this.apiBaseUrl}/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream'
       },
-      body: JSON.stringify({ message, provider } satisfies ChatRequest)
+      body: JSON.stringify({ message, provider, model } satisfies ChatRequest)
     });
 
     if (!response.ok || !response.body) {
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        const error = (await response.json()) as { error?: string };
+        throw new Error(error.error ?? 'Streaming request failed.');
+      }
+
       throw new Error('Streaming request failed.');
     }
 
@@ -110,15 +131,60 @@ export class ChatApiService {
     }
 
     if (eventName === 'done') {
-      handlers.onDone?.(payload.metrics);
+      handlers.onDone?.(payload.metrics, payload.model);
     }
+  }
+
+  async fetchOllamaModels(): Promise<OllamaModelOption[]> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.apiBaseUrl}/chat/ollama/models`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+    } catch {
+      throw new Error('Backend API is unreachable. Start the backend dev server and retry.');
+    }
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (response.status === 503) {
+        throw new Error(body?.error ?? 'Ollama is unavailable. Ensure ollama serve is running.');
+      }
+
+      throw new Error(body?.error ?? `Unable to load Ollama models (HTTP ${response.status}).`);
+    }
+
+    return (await response.json()) as OllamaModelOption[];
+  }
+
+  async warmupOllamaModel(model: string): Promise<void> {
+    const response = await fetch(`${this.apiBaseUrl}/chat/ollama/warmup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({ model })
+    });
+
+    if (response.ok) {
+      return;
+    }
+
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `Unable to warm up model '${model}'.`);
   }
 
   private resolveApiBaseUrl(): string {
     const globalConfig = (globalThis as { __CHATBOT_API_BASE_URL__?: unknown }).__CHATBOT_API_BASE_URL__;
     if (typeof globalConfig === 'string') {
       const trimmed = globalConfig.trim().replace(/\/$/, '');
-      if (trimmed && trimmed !== '__CHATBOT_API_BASE_URL__') {
+      const looksLikeTemplateToken = /^__[^\s]+__$/.test(trimmed);
+      if (trimmed && !looksLikeTemplateToken) {
         return trimmed;
       }
     }

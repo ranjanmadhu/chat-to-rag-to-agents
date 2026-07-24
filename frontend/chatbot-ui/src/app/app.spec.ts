@@ -10,15 +10,28 @@ describe('App', () => {
     sendMessage: vi.fn(() =>
       of({ message: '**A model** predicts the next useful token.', model: 'test' })
     ),
-    streamMessage: vi.fn(async (_message: string, _provider: string | undefined, handlers) => {
+    streamMessage: vi.fn(async (_message: string, _provider: string | undefined, _model: string | undefined, handlers) => {
       handlers.onChunk('**A model** predicts the next useful token.');
       handlers.onDone?.();
-    })
+    }),
+    fetchOllamaModels: vi.fn(async () => [
+      {
+        model: 'llama3.2:1b',
+        label: 'Llama 3.2 1B',
+        supportsText: true,
+        supportsImage: false,
+        isInstalled: true,
+        isRecommended: true
+      }
+    ]),
+    warmupOllamaModel: vi.fn(async () => {})
   };
 
   beforeEach(() => {
     chatApi.sendMessage.mockClear();
     chatApi.streamMessage.mockClear();
+    chatApi.fetchOllamaModels.mockClear();
+    chatApi.warmupOllamaModel.mockClear();
   });
 
   beforeEach(async () => {
@@ -60,6 +73,7 @@ describe('App', () => {
     expect(chatApi.streamMessage).toHaveBeenCalledWith(
       'What is an LLM?',
       'gemini',
+      undefined,
       expect.any(Object)
     );
     expect(fixture.nativeElement.textContent).toContain('A model predicts the next useful token.');
