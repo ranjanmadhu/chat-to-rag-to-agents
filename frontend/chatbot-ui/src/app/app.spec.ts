@@ -10,7 +10,7 @@ describe('App', () => {
     sendMessage: vi.fn(() =>
       of({ message: '**A model** predicts the next useful token.', model: 'test' })
     ),
-    streamMessage: vi.fn(async (_message: string, _provider: string | undefined, _model: string | undefined, handlers) => {
+    streamMessage: vi.fn(async (_message: string, _provider: string | undefined, _model: string | undefined, handlers, _context) => {
       handlers.onChunk('**A model** predicts the next useful token.');
       handlers.onDone?.();
     }),
@@ -74,7 +74,8 @@ describe('App', () => {
       'What is an LLM?',
       'gemini',
       undefined,
-      expect.any(Object)
+      expect.any(Object),
+      undefined
     );
     expect(fixture.nativeElement.textContent).toContain('A model predicts the next useful token.');
     expect(fixture.nativeElement.querySelector('.message-markdown strong')?.textContent).toBe(

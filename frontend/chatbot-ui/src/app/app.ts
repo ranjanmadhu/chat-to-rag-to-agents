@@ -7,18 +7,25 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MarkdownComponent } from 'ngx-markdown';
-import { ChatApiService, ChatMetrics, OllamaModelOption } from './chat-api.service';
+import {
+  ChatApiService,
+  ChatMetrics,
+  OllamaModelOption,
+  TextFileContext
+} from './chat-api.service';
 
 type ChatRole = 'user' | 'assistant';
 type ThemeMode = 'light' | 'dark';
 type Provider = 'ollama' | 'gemini';
 
 const ThemeStorageKey = 'chatbot-ui-theme-mode';
+const MaxContextCharacters = 120_000;
 
 interface ChatMessage {
   role: ChatRole;
   content: string;
   metrics?: ChatMetrics;
+  contextFileName?: string;
 }
 
 @Component({
@@ -47,11 +54,15 @@ export class App {
   readonly isSwitchingModel = signal(false);
   readonly modelSwitchStatus = signal('');
   readonly modelSwitchError = signal('');
+  readonly contextFileName = signal('');
+  readonly contextText = signal('');
+  readonly contextError = signal('');
   readonly messages = signal<ChatMessage[]>([]);
   readonly activeAssistantIndex = signal<number | null>(null);
   readonly themeMode = signal<ThemeMode>('light');
   readonly isDarkTheme = computed(() => this.themeMode() === 'dark');
   readonly isOllamaSelected = computed(() => this.selectedProvider() === 'ollama');
+  readonly hasContext = computed(() => !!this.contextText());
   readonly themeIcon = computed(() => (this.isDarkTheme() ? 'light_mode' : 'dark_mode'));
   readonly themeLabel = computed(() =>
     this.isDarkTheme() ? 'Switch to light mode' : 'Switch to dark mode'
@@ -74,36 +85,46 @@ export class App {
 
   private async sendMessageInternal(): Promise<void> {
     const message = this.draft().trim();
+    const context = this.resolveTextContext();
 
     if (!message || this.isSending()) {
       return;
     }
 
-    this.messages.update(messages => [...messages, { role: 'user', content: message }]);
+    this.messages.update(messages => [
+      ...messages,
+      { role: 'user', content: message, contextFileName: context?.fileName }
+    ]);
     this.draft.set('');
     this.isSending.set(true);
     const assistantIndex = this.appendAssistantMessage();
     this.activeAssistantIndex.set(assistantIndex);
 
     try {
-      await this.chatApi.streamMessage(message, this.selectedProvider(), this.resolveCurrentModel(), {
-        onChunk: chunk => {
-          this.updateMessageAt(assistantIndex, current => ({
-            ...current,
-            content: current.content + chunk
-          }));
-        },
-        onDone: (metrics, model) => {
-          this.updateMessageAt(assistantIndex, current => ({
-            ...current,
-            metrics
-          }));
+      await this.chatApi.streamMessage(
+        message,
+        this.selectedProvider(),
+        this.resolveCurrentModel(),
+        {
+          onChunk: chunk => {
+            this.updateMessageAt(assistantIndex, current => ({
+              ...current,
+              content: current.content + chunk
+            }));
+          },
+          onDone: (metrics, model) => {
+            this.updateMessageAt(assistantIndex, current => ({
+              ...current,
+              metrics
+            }));
 
-          if (this.isOllamaSelected() && model) {
-            this.selectedOllamaModel.set(model);
+            if (this.isOllamaSelected() && model) {
+              this.selectedOllamaModel.set(model);
+            }
           }
-        }
-      });
+        },
+        context
+      );
 
       this.updateMessageAt(assistantIndex, current => ({
         ...current,
@@ -182,6 +203,55 @@ export class App {
 
   setOllamaModel(model: string): void {
     void this.switchOllamaModel(model);
+  }
+
+  openContextFilePicker(fileInput: HTMLInputElement): void {
+    if (this.isSending() || this.isSwitchingModel()) {
+      return;
+    }
+
+    fileInput.value = '';
+    fileInput.click();
+  }
+
+  async onContextFileSelected(event: Event): Promise<void> {
+    this.contextError.set('');
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const trimmed = text.trim();
+
+      if (!trimmed) {
+        this.contextError.set('Selected file is empty. Choose a file with text content.');
+        this.clearContextFile();
+        return;
+      }
+
+      if (trimmed.length > MaxContextCharacters) {
+        this.contextError.set(
+          `Selected file is too large (${trimmed.length} chars). Limit is ${MaxContextCharacters} chars.`
+        );
+        this.clearContextFile();
+        return;
+      }
+
+      this.contextFileName.set(file.name);
+      this.contextText.set(trimmed);
+    } catch {
+      this.contextError.set('Unable to read selected file. Try a plain text file.');
+      this.clearContextFile();
+    }
+  }
+
+  clearContextFile(): void {
+    this.contextFileName.set('');
+    this.contextText.set('');
   }
 
   formatModelOption(option: OllamaModelOption): string {
@@ -316,6 +386,18 @@ export class App {
 
     const selected = this.selectedOllamaModel().trim();
     return selected || undefined;
+  }
+
+  private resolveTextContext(): TextFileContext | undefined {
+    const text = this.contextText().trim();
+    if (!text) {
+      return undefined;
+    }
+
+    return {
+      text,
+      fileName: this.contextFileName() || 'uploaded-context.txt'
+    };
   }
 
   private resetSession(): void {

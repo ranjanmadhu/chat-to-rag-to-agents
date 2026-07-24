@@ -26,18 +26,38 @@ public sealed class ChatServiceTests
             service.SendAsync(new ChatRequest(" "), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task SendAsync_Includes_Text_Context_When_Provided()
+    {
+        var service = new ChatService(new StubChatModelClientFactory(
+            new StubChatModelClient(
+                "Context-aware response.",
+                messages =>
+                {
+                    Assert.Contains(messages, message => message.Role == "system" && message.Content.Contains("Q3 roadmap"));
+                    Assert.Contains(messages, message => message.Role == "user" && message.Content == "Hello");
+                })));
+
+        var response = await service.SendAsync(
+            new ChatRequest("Hello", ContextText: "Q3 roadmap: launch search and analytics", ContextFileName: "roadmap.txt"),
+            CancellationToken.None);
+
+        Assert.Equal("Context-aware response.", response.Message);
+    }
+
     private sealed class StubChatModelClientFactory(IChatModelClient chatModelClient) : IChatModelClientFactory
     {
         public IChatModelClient Resolve(string? provider) => chatModelClient;
     }
 
-    private sealed class StubChatModelClient(string content) : IChatModelClient
+    private sealed class StubChatModelClient(string content, Action<IReadOnlyCollection<ChatMessage>>? validator = null) : IChatModelClient
     {
         public Task<ChatModelResponse> SendAsync(
             IReadOnlyCollection<ChatMessage> messages,
             string? model,
             CancellationToken cancellationToken)
         {
+            validator?.Invoke(messages);
             Assert.Contains(messages, message => message.Role == "user" && message.Content == "Hello");
             return Task.FromResult(new ChatModelResponse(new ChatMessage("assistant", content), model ?? "stub-model"));
         }
@@ -48,6 +68,7 @@ public sealed class ChatServiceTests
             [EnumeratorCancellation]
             CancellationToken cancellationToken)
         {
+            validator?.Invoke(messages);
             Assert.Contains(messages, message => message.Role == "user" && message.Content == "Hello");
             await Task.Yield();
             yield return new ChatStreamChunk(content, Model: model ?? "stub-model");

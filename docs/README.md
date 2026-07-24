@@ -74,7 +74,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 |  |  | 02A | Provider Switching with Gemini | [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md) | Published |
 |  |  | 02B | Azure Deployment, Runtime Injection, and Safe Confirmation | [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md) | Published |
 |  |  | 02C | Ollama Model Management, Warmup, and Dynamic Capabilities | [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md) | Published |
-| Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | TBD | Planned |
+| Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | [Learning Guide 03](./learning-guide-03-text-file-context.md) | Published |
 |  |  | 04 | Image Context | TBD | Planned |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | Planned |
 |  |  | 06 | External Tools | TBD | Planned |
@@ -110,6 +110,7 @@ Direct links for this stage:
 1. [Learning Guide 02](./learning-guide-02-provider-switching-and-gemini.md)
 2. [Learning Guide 02B](./learning-guide-02b-azure-deployment-and-safe-confirmation.md)
 3. [Learning Guide 02C](./learning-guide-02c-ollama-model-management-warmup-and-capabilities.md)
+4. [Learning Guide 03](./learning-guide-03-text-file-context.md)
 
 ## What You Will Learn
 
