@@ -6,6 +6,13 @@ export interface ChatRequest {
   message: string;
   provider?: string;
   model?: string;
+  contextText?: string;
+  contextFileName?: string;
+}
+
+export interface TextFileContext {
+  text: string;
+  fileName: string;
 }
 
 export interface ChatResponse {
@@ -46,15 +53,27 @@ export class ChatApiService {
   private readonly http = inject(HttpClient);
   private readonly apiBaseUrl = this.resolveApiBaseUrl();
 
-  sendMessage(message: string, provider?: string, model?: string): Observable<ChatResponse> {
-    return this.http.post<ChatResponse>(`${this.apiBaseUrl}/chat`, { message, provider, model } satisfies ChatRequest);
+  sendMessage(
+    message: string,
+    provider?: string,
+    model?: string,
+    context?: TextFileContext
+  ): Observable<ChatResponse> {
+    return this.http.post<ChatResponse>(`${this.apiBaseUrl}/chat`, {
+      message,
+      provider,
+      model,
+      contextText: context?.text,
+      contextFileName: context?.fileName
+    } satisfies ChatRequest);
   }
 
   async streamMessage(
     message: string,
     provider: string | undefined,
     model: string | undefined,
-    handlers: StreamHandlers
+    handlers: StreamHandlers,
+    context?: TextFileContext
   ): Promise<void> {
     const response = await fetch(`${this.apiBaseUrl}/chat/stream`, {
       method: 'POST',
@@ -62,7 +81,13 @@ export class ChatApiService {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream'
       },
-      body: JSON.stringify({ message, provider, model } satisfies ChatRequest)
+      body: JSON.stringify({
+        message,
+        provider,
+        model,
+        contextText: context?.text,
+        contextFileName: context?.fileName
+      } satisfies ChatRequest)
     });
 
     if (!response.ok || !response.body) {

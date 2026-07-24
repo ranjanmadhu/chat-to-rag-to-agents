@@ -266,6 +266,32 @@
   white-space: pre-wrap;
 }
 
+.message-context-chip {
+  align-items: center;
+  background: color-mix(in srgb, #5d9eff 20%, transparent);
+  border: 1px solid color-mix(in srgb, #5d9eff 42%, var(--border-soft));
+  border-radius: 999px;
+  color: var(--text-main);
+  display: inline-flex;
+  font-size: 0.76rem;
+  gap: 4px;
+  margin-bottom: 8px;
+  max-width: 100%;
+  padding: 3px 8px;
+}
+
+.message-context-chip mat-icon {
+  font-size: 15px;
+  height: 15px;
+  width: 15px;
+}
+
+.message-context-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .message-markdown {
   display: block;
   line-height: 1.55;
@@ -359,6 +385,55 @@
   max-width: 980px;
   padding: 14px clamp(14px, 3.5vw, 30px) 18px;
   width: 100%;
+}
+
+.hidden-context-input {
+  display: none;
+}
+
+.context-pill {
+  align-items: center;
+  background: color-mix(in srgb, #6aa8ff 16%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #6aa8ff 38%, var(--border-soft));
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 6px 4px 10px;
+}
+
+.context-pill-label {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.context-pill-name {
+  color: var(--text-main);
+  font-size: 0.82rem;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-pill-remove {
+  color: var(--text-dim);
+  height: 28px;
+  width: 28px;
+}
+
+.context-error {
+  align-self: stretch;
+  background: color-mix(in srgb, #ff8a65 22%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #ff8a65 38%, var(--border-soft));
+  border-radius: 10px;
+  color: var(--text-main);
+  font-size: 0.8rem;
+  max-width: 100%;
+  padding: 8px 10px;
 }
 
 .composer-shell {

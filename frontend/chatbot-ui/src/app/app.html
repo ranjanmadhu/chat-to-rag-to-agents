@@ -89,6 +89,12 @@
                 <div class="message-stats">{{ formatMetrics(message.metrics) }}</div>
               }
             } @else {
+              @if (message.contextFileName) {
+                <div class="message-context-chip" title="Text-file context was attached for this question">
+                  <mat-icon>attach_file</mat-icon>
+                  <span>{{ message.contextFileName }}</span>
+                </div>
+              }
               <p>{{ message.content }}</p>
             }
           </section>
@@ -97,8 +103,44 @@
     </div>
 
     <form class="composer" (ngSubmit)="sendMessage()">
+      <input
+        #contextFileInput
+        type="file"
+        class="hidden-context-input"
+        accept=".txt,.md,.csv,.json,.log,.xml,.yaml,.yml,text/*"
+        (change)="onContextFileSelected($event)"
+      />
+
+      @if (hasContext()) {
+        <div class="context-pill" role="status">
+          <span class="context-pill-label">Context:</span>
+          <span class="context-pill-name">{{ contextFileName() }}</span>
+          <button
+            mat-icon-button
+            type="button"
+            class="context-pill-remove"
+            aria-label="Remove attached context file"
+            title="Remove context"
+            (click)="clearContextFile()"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+      }
+
+      @if (contextError()) {
+        <div class="context-error" role="status">{{ contextError() }}</div>
+      }
+
       <div class="composer-shell">
-        <button mat-icon-button type="button" class="composer-icon" aria-label="Add context" title="Add context">
+        <button
+          mat-icon-button
+          type="button"
+          class="composer-icon"
+          aria-label="Add text file context"
+          title="Add text file context"
+          (click)="openContextFilePicker(contextFileInput)"
+        >
           <mat-icon>add</mat-icon>
         </button>
 
