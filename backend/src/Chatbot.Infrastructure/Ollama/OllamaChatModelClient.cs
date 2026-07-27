@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Chatbot.Application.Chat;
+using Chatbot.Application.Tools;
 using Chatbot.Domain;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -21,13 +22,15 @@ public sealed class OllamaChatModelClient(
     public async Task<ChatModelResponse> SendAsync(
         IReadOnlyCollection<ChatMessage> messages,
         string? model,
+        IReadOnlyCollection<AiToolDefinition>? tools,
         CancellationToken cancellationToken)
     {
         var resolvedModel = ResolveModel(model);
         var request = new OllamaChatRequest(
             resolvedModel,
             messages.Select(MapMessage).ToArray(),
-            Stream: false);
+            Stream: false,
+            Tools: MapTools(tools));
 
         try
         {
@@ -35,10 +38,21 @@ public sealed class OllamaChatModelClient(
             response.EnsureSuccessStatusCode();
 
             var body = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
+            var toolCalls = body?.Message?.ToolCalls?
+                .Where(call => !string.IsNullOrWhiteSpace(call.Function?.Name))
+                .Select(call => new AiToolCall(
+                    call.Function!.Name!,
+                    call.Function.Arguments.ValueKind is JsonValueKind.Undefined
+                        ? "{}"
+                        : call.Function.Arguments.GetRawText(),
+                    call.Id))
+                .ToArray();
+
             return new ChatModelResponse(
                 new ChatMessage("assistant", body?.Message?.Content ?? string.Empty),
                 resolvedModel,
-                BuildMetrics(body?.PromptEvalCount, body?.EvalCount, body?.EvalDuration));
+                BuildMetrics(body?.PromptEvalCount, body?.EvalCount, body?.EvalDuration),
+                toolCalls);
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -72,13 +86,15 @@ public sealed class OllamaChatModelClient(
     public async IAsyncEnumerable<ChatStreamChunk> StreamAsync(
         IReadOnlyCollection<ChatMessage> messages,
         string? model,
+        IReadOnlyCollection<AiToolDefinition>? tools,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var resolvedModel = ResolveModel(model);
         var request = new OllamaChatRequest(
             resolvedModel,
             messages.Select(MapMessage).ToArray(),
-            Stream: true);
+            Stream: true,
+            Tools: MapTools(tools));
 
         IAsyncEnumerable<ChatStreamChunk> stream;
 
@@ -199,17 +215,71 @@ public sealed class OllamaChatModelClient(
         return new OllamaMessage(message.Role, message.Content, images);
     }
 
+    private static IReadOnlyCollection<OllamaToolDefinition>? MapTools(IReadOnlyCollection<AiToolDefinition>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+        {
+            return null;
+        }
+
+        return tools
+            .Select(tool => new OllamaToolDefinition(
+                "function",
+                new OllamaToolFunction(
+                    tool.Id,
+                    tool.Description,
+                    new OllamaToolParameters(
+                        "object",
+                        tool.Parameters.ToDictionary(
+                            parameter => parameter.Name,
+                            parameter => new OllamaToolProperty(parameter.Type, parameter.Description)),
+                        tool.Parameters.Where(parameter => parameter.IsRequired).Select(parameter => parameter.Name).ToArray()))))
+            .ToArray();
+    }
+
     private sealed record OllamaChatRequest(
         [property: JsonPropertyName("model")] string Model,
         [property: JsonPropertyName("messages")] IReadOnlyCollection<OllamaMessage> Messages,
-        [property: JsonPropertyName("stream")] bool Stream);
+        [property: JsonPropertyName("stream")] bool Stream,
+        [property: JsonPropertyName("tools")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyCollection<OllamaToolDefinition>? Tools = null);
 
     private sealed record OllamaMessage(
         [property: JsonPropertyName("role")] string Role,
         [property: JsonPropertyName("content")] string Content,
         [property: JsonPropertyName("images")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyCollection<string>? Images = null);
+        IReadOnlyCollection<string>? Images = null,
+        [property: JsonPropertyName("tool_calls")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyCollection<OllamaToolCall>? ToolCalls = null);
+
+    private sealed record OllamaToolDefinition(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("function")] OllamaToolFunction Function);
+
+    private sealed record OllamaToolFunction(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("description")] string Description,
+        [property: JsonPropertyName("parameters")] OllamaToolParameters Parameters);
+
+    private sealed record OllamaToolParameters(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("properties")] IReadOnlyDictionary<string, OllamaToolProperty> Properties,
+        [property: JsonPropertyName("required")] IReadOnlyCollection<string> Required);
+
+    private sealed record OllamaToolProperty(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("description")] string Description);
+
+    private sealed record OllamaToolCall(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("function")] OllamaToolCallFunction? Function);
+
+    private sealed record OllamaToolCallFunction(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("arguments")] JsonElement Arguments);
 
     private sealed record OllamaChatResponse(
         [property: JsonPropertyName("message")] OllamaMessage? Message,

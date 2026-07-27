@@ -55,7 +55,7 @@ public sealed class GeminiChatModelClientTests
             }),
             NullLogger<GeminiChatModelClient>.Instance);
 
-        var result = await client.SendAsync(new[] { new ChatMessage("user", "hi") }, null, CancellationToken.None);
+        var result = await client.SendAsync(new[] { new ChatMessage("user", "hi") }, null, null, CancellationToken.None);
 
         Assert.NotNull(capturedRequest);
         Assert.Equal(HttpMethod.Post, capturedRequest!.Method);
@@ -101,7 +101,7 @@ public sealed class GeminiChatModelClientTests
             NullLogger<GeminiChatModelClient>.Instance);
 
         var chunks = new List<ChatStreamChunk>();
-        await foreach (var chunk in client.StreamAsync(new[] { new ChatMessage("user", "hi") }, null, CancellationToken.None))
+        await foreach (var chunk in client.StreamAsync(new[] { new ChatMessage("user", "hi") }, null, null, CancellationToken.None))
         {
             chunks.Add(chunk);
         }
@@ -164,6 +164,7 @@ public sealed class GeminiChatModelClientTests
                     "What is in this image?",
                     new[] { new ChatImageAttachment("image/png", "AQIDBA==", "photo.png") })
             },
+            null,
             null,
             CancellationToken.None);
 

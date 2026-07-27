@@ -10,6 +10,7 @@ import { MarkdownComponent } from 'ngx-markdown';
 import {
   ChatApiService,
   ChatMetrics,
+  ChatToolOption,
   ImageContext,
   OllamaModelOption,
   TextFileContext
@@ -34,8 +35,23 @@ interface ChatMessage {
   role: ChatRole;
   content: string;
   metrics?: ChatMetrics;
+  usedToolId?: string;
+  enabledToolIds?: string[];
   contextFileName?: string;
   contextImages?: ImagePreview[];
+}
+
+interface ToolGroup {
+  category: string;
+  tools: ChatToolOption[];
+}
+
+interface ProviderCapabilities {
+  supportsText: boolean;
+  supportsImage: boolean;
+  supportsTools: boolean;
+  isInstalled: boolean;
+  isCloud: boolean;
 }
 
 @Component({
@@ -61,6 +77,10 @@ export class App {
   readonly selectedOllamaModel = signal('');
   readonly ollamaModels = signal<OllamaModelOption[]>([]);
   readonly isSending = signal(false);
+  readonly isLoadingTools = signal(false);
+  readonly toolsError = signal('');
+  readonly availableTools = signal<ChatToolOption[]>([]);
+  readonly selectedToolIds = signal<string[]>([]);
   readonly isSwitchingModel = signal(false);
   readonly modelSwitchStatus = signal('');
   readonly modelSwitchError = signal('');
@@ -81,22 +101,77 @@ export class App {
   readonly hasTextContext = computed(() => !!this.contextText());
   readonly hasPdfContext = computed(() => !!this.contextPdfFile());
   readonly hasImageContext = computed(() => this.contextImages().length > 0);
+  readonly hasAvailableTools = computed(() => this.availableTools().length > 0);
+  readonly selectedToolCount = computed(() => this.selectedToolIds().length);
+  readonly groupedAvailableTools = computed<ToolGroup[]>(() => {
+    const groups = new Map<string, ChatToolOption[]>();
+
+    for (const tool of this.availableTools()) {
+      const category = tool.category?.trim() || 'General';
+      const bucket = groups.get(category);
+      if (bucket) {
+        bucket.push(tool);
+      } else {
+        groups.set(category, [tool]);
+      }
+    }
+
+    return Array.from(groups.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([category, tools]) => ({
+        category,
+        tools: [...tools].sort((a, b) => a.displayName.localeCompare(b.displayName))
+      }));
+  });
   readonly imageContextCount = computed(() => this.contextImages().length);
   readonly hasContext = computed(() => this.hasTextContext() || this.hasPdfContext() || this.hasImageContext());
   readonly isImageDialogOpen = computed(() => this.dialogImages().length > 0);
   readonly activeDialogImage = computed(() => this.dialogImages()[this.dialogImageIndex()] ?? null);
+  readonly selectedOllamaModelOption = computed<OllamaModelOption | null>(() => {
+    if (!this.isOllamaSelected()) {
+      return null;
+    }
+
+    const selectedModel = this.resolveSelectedOllamaModel();
+    if (!selectedModel) {
+      return null;
+    }
+
+    return this.ollamaModels().find(model => model.model === selectedModel) ?? null;
+  });
+  readonly selectedProviderCapabilities = computed<ProviderCapabilities>(() => {
+    if (this.selectedProvider() === 'gemini') {
+      return {
+        supportsText: true,
+        supportsImage: true,
+        supportsTools: true,
+        isInstalled: true,
+        isCloud: true
+      };
+    }
+
+    const selectedModel = this.selectedOllamaModelOption();
+    return {
+      supportsText: selectedModel?.supportsText ?? false,
+      supportsImage: selectedModel?.supportsImage ?? false,
+      supportsTools: selectedModel?.supportsTools ?? false,
+      isInstalled: selectedModel?.isInstalled ?? false,
+      isCloud: false
+    };
+  });
   readonly isImageContextSupported = computed(() => {
     if (this.selectedProvider() === 'gemini') {
       return true;
     }
 
-    const selectedModel = this.resolveSelectedOllamaModel();
-    if (!selectedModel) {
-      return false;
+    return this.selectedOllamaModelOption()?.supportsImage ?? false;
+  });
+  readonly isToolSelectionSupported = computed(() => {
+    if (this.selectedProvider() === 'gemini') {
+      return true;
     }
 
-    const option = this.ollamaModels().find(model => model.model === selectedModel);
-    return option?.supportsImage ?? false;
+    return this.selectedOllamaModelOption()?.supportsTools ?? false;
   });
   readonly themeIcon = computed(() => (this.isDarkTheme() ? 'light_mode' : 'dark_mode'));
   readonly themeLabel = computed(() =>
@@ -112,6 +187,7 @@ export class App {
 
   constructor() {
     this.initializeTheme();
+    void this.loadAvailableTools();
   }
 
   sendMessage(): void {
@@ -123,6 +199,7 @@ export class App {
     const pdfContextFile = this.contextPdfFile();
     const context = this.resolveInputContext();
     const contextImages = this.contextImages();
+    const enabledToolIds = this.isToolSelectionSupported() ? this.selectedToolIds() : [];
 
     if (!message || this.isSending()) {
       return;
@@ -133,6 +210,7 @@ export class App {
       {
         role: 'user',
         content: message,
+        enabledToolIds: [...enabledToolIds],
         contextFileName: context?.fileName ?? pdfContextFile?.name,
         contextImages: [...contextImages]
       }
@@ -151,13 +229,18 @@ export class App {
             content: current.content + chunk
           }));
         },
-        onDone: (metrics?: ChatMetrics, model?: string) => {
+        onDone: (metrics?: ChatMetrics, model?: string, usedToolId?: string) => {
           this.updateMessageAt(assistantIndex, current => ({
             ...current,
-            metrics
+            metrics,
+            usedToolId
           }));
 
-          if (this.isOllamaSelected() && model) {
+          if (
+            this.isOllamaSelected() &&
+            model &&
+            this.ollamaModels().some(option => option.model === model)
+          ) {
             this.selectedOllamaModel.set(model);
           }
         }
@@ -170,7 +253,8 @@ export class App {
           this.resolveCurrentModel(),
           streamHandlers,
           pdfContextFile,
-          context?.images
+          context?.images,
+          enabledToolIds
         );
       } else {
         await this.chatApi.streamMessage(
@@ -178,7 +262,8 @@ export class App {
           this.selectedProvider(),
           this.resolveCurrentModel(),
           streamHandlers,
-          context
+          context,
+          enabledToolIds
         );
       }
 
@@ -236,6 +321,62 @@ export class App {
     }
 
     return parts.join(' | ');
+  }
+
+  isToolSelected(toolId: string): boolean {
+    return this.selectedToolIds().includes(toolId);
+  }
+
+  onToolSelectionChange(toolId: string, enabled: boolean): void {
+    if (this.isSending() || this.isSwitchingModel() || !this.isToolSelectionSupported()) {
+      return;
+    }
+
+    this.selectedToolIds.update(current => {
+      if (enabled) {
+        if (current.includes(toolId)) {
+          return current;
+        }
+
+        return [...current, toolId];
+      }
+
+      return current.filter(id => id !== toolId);
+    });
+  }
+
+  clearSelectedTools(): void {
+    if (this.isSending() || this.isSwitchingModel()) {
+      return;
+    }
+
+    this.selectedToolIds.set([]);
+  }
+
+  getToolSelectorLabel(): string {
+    if (!this.isToolSelectionSupported()) {
+      return 'Disabled for selected model';
+    }
+
+    const count = this.selectedToolCount();
+    if (count === 0) {
+      return 'Select tools';
+    }
+
+    if (count === 1) {
+      return '1 tool selected';
+    }
+
+    return `${count} tools selected`;
+  }
+
+  getToolDisplayName(toolId: string | undefined): string {
+    if (!toolId) {
+      return '';
+    }
+
+    const tool = this.availableTools().find(option => option.id === toolId);
+    return tool?.displayName ?? toolId;
   }
 
   isPendingAssistant(index: number, message: ChatMessage): boolean {
@@ -480,17 +621,73 @@ export class App {
   }
 
   formatModelOption(option: OllamaModelOption): string {
-    let modality = 'other';
+    const capabilities: string[] = [];
+
     if (option.supportsText && option.supportsImage) {
-      modality = 'text+image';
+      capabilities.push('text+image');
     } else if (option.supportsText) {
-      modality = 'text';
+      capabilities.push('text');
     } else if (option.supportsImage) {
-      modality = 'image';
+      capabilities.push('image');
+    } else {
+      capabilities.push('other');
+    }
+
+    if (option.supportsTools) {
+      capabilities.push('tools');
     }
 
     const install = option.isInstalled ? 'installed' : 'not installed';
-    return `${option.label} (${modality}, ${install})`;
+    return `${option.label} (${capabilities.join('+')}, ${install})`;
+  }
+
+  formatModelCapabilitiesSubheader(option: OllamaModelOption): string {
+    const tags: string[] = [];
+    tags.push(option.supportsText ? 'text' : 'no-text');
+    tags.push(option.supportsImage ? 'image' : 'no-image');
+    tags.push(option.supportsTools ? 'tools' : 'no-tools');
+    tags.push(option.isInstalled ? 'installed' : 'not installed');
+    tags.push(`source:${this.getCapabilitySourceLabel(option.capabilitySource)}`);
+    return tags.join(' • ');
+  }
+
+  getCapabilitySourceLabel(source: OllamaModelOption['capabilitySource']): string {
+    if (source === 'runtime') {
+      return 'runtime';
+    }
+
+    if (source === 'fallback') {
+      return 'fallback';
+    }
+
+    return 'unknown';
+  }
+
+  getSelectedModelCapabilitySource(): string {
+    const selected = this.selectedOllamaModelOption();
+    if (!selected) {
+      return '';
+    }
+
+    return this.getCapabilitySourceLabel(selected.capabilitySource);
+  }
+
+  getSelectedModelDisplayLabel(): string {
+    const selected = this.selectedOllamaModelOption();
+    if (selected) {
+      return selected.label;
+    }
+
+    return this.selectedOllamaModel() || 'Select model';
+  }
+
+  isSelectedOllamaModel(modelName: string): boolean {
+    return this.selectedOllamaModel() === modelName;
+  }
+
+  selectOllamaModelFromMenu(modelName: string, menu: HTMLDetailsElement): void {
+    menu.open = false;
+    void this.switchOllamaModel(modelName);
   }
 
   openMessageImageDialog(images: ImagePreview[], startIndex: number): void {
@@ -575,12 +772,11 @@ export class App {
 
     if (nextProvider === 'ollama') {
       await this.prepareOllamaModelSelection(false);
-      if (!this.isImageContextSupported()) {
-        this.clearImageContext();
-      }
+      this.enforceCapabilityConstraints();
     } else {
       this.modelSwitchError.set('');
       this.modelSwitchStatus.set('');
+      this.enforceCapabilityConstraints();
     }
   }
 
@@ -634,9 +830,7 @@ export class App {
     try {
       await this.chatApi.warmupOllamaModel(model);
       this.selectedOllamaModel.set(model);
-      if (!this.isImageContextSupported()) {
-        this.clearImageContext();
-      }
+      this.enforceCapabilityConstraints();
       if (resetSessionOnWarmup) {
         this.resetSession();
       }
@@ -760,12 +954,41 @@ export class App {
     this.draft.set('');
   }
 
+  private async loadAvailableTools(): Promise<void> {
+    this.isLoadingTools.set(true);
+    this.toolsError.set('');
+
+    try {
+      const tools = await this.chatApi.fetchTools();
+      this.availableTools.set(tools);
+      this.selectedToolIds.update(current =>
+        current.filter(id => tools.some(tool => tool.id === id))
+      );
+      this.enforceCapabilityConstraints();
+    } catch (error) {
+      this.availableTools.set([]);
+      this.toolsError.set(this.toErrorMessage(error));
+    } finally {
+      this.isLoadingTools.set(false);
+    }
+  }
+
   private toErrorMessage(error: unknown): string {
     if (error instanceof Error && error.message) {
       return error.message;
     }
 
     return 'Operation failed. Please retry.';
+  }
+
+  private enforceCapabilityConstraints(): void {
+    if (!this.isToolSelectionSupported() && this.selectedToolIds().length > 0) {
+      this.selectedToolIds.set([]);
+    }
+
+    if (!this.isImageContextSupported() && this.contextImages().length > 0) {
+      this.clearImageContext();
+    }
   }
 
   private initializeTheme(): void {

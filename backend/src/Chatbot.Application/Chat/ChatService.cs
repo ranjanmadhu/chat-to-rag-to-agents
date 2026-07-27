@@ -1,4 +1,5 @@
 using Chatbot.Domain;
+using Chatbot.Application.Tools;
 using System.Runtime.CompilerServices;
 
 namespace Chatbot.Application.Chat;
@@ -6,7 +7,9 @@ namespace Chatbot.Application.Chat;
 public sealed class ChatService(
     IChatModelClientFactory chatModelClientFactory,
     IContextWindowBudgetResolver contextWindowBudgetResolver,
-    IContextTokenCounter contextTokenCounter)
+    IContextTokenCounter contextTokenCounter,
+    IChatToolService chatToolService,
+    IAiToolService aiToolService)
 {
     private const string AssistantRole = "assistant";
     private const string SystemRole = "system";
@@ -22,9 +25,44 @@ public sealed class ChatService(
         }
 
         var messages = await BuildMessagesAsync(request, cancellationToken);
+        var enabledToolDefinitions = aiToolService.GetEnabledToolDefinitions(request.EnabledToolIds);
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
-        var response = await chatModelClient.SendAsync(messages, request.Model, cancellationToken);
+        var response = await chatModelClient.SendAsync(messages, request.Model, enabledToolDefinitions, cancellationToken);
+
+        if (response.ToolCalls is not null && response.ToolCalls.Count > 0)
+        {
+            foreach (var toolCall in response.ToolCalls)
+            {
+                var toolResult = await aiToolService.TryExecuteToolCallAsync(toolCall, cancellationToken);
+                if (toolResult is not null)
+                {
+                    return new ChatResponse(
+                        toolResult.Output,
+                        $"tool:{toolResult.ToolId}",
+                        Metrics: null,
+                        UsedToolId: toolResult.ToolId);
+                }
+            }
+        }
+
+        if (enabledToolDefinitions.Count > 0)
+        {
+            var deterministicFallback = await chatToolService.TryExecuteAsync(
+                request.Message,
+                request.EnabledToolIds,
+                cancellationToken);
+
+            if (deterministicFallback is not null)
+            {
+                return new ChatResponse(
+                    deterministicFallback.Output,
+                    $"tool:{deterministicFallback.ToolId}",
+                    Metrics: null,
+                    UsedToolId: deterministicFallback.ToolId);
+            }
+        }
+
         var content = string.IsNullOrWhiteSpace(response.Message.Content)
             ? "The model returned an empty response."
             : response.Message.Content.Trim();
@@ -44,11 +82,24 @@ public sealed class ChatService(
             throw new ArgumentException("Message is required.", nameof(request));
         }
 
+        var enabledToolDefinitions = aiToolService.GetEnabledToolDefinitions(request.EnabledToolIds);
+        if (enabledToolDefinitions.Count > 0)
+        {
+            var response = await SendAsync(request, cancellationToken);
+            yield return new ChatStreamChunk(response.Message, Model: response.Model);
+            yield return new ChatStreamChunk(
+                string.Empty,
+                IsDone: true,
+                Model: response.Model,
+                UsedToolId: response.UsedToolId);
+            yield break;
+        }
+
         var messages = await BuildMessagesAsync(request, cancellationToken);
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
 
-        await foreach (var responseChunk in chatModelClient.StreamAsync(messages, request.Model, cancellationToken)
+        await foreach (var responseChunk in chatModelClient.StreamAsync(messages, request.Model, enabledToolDefinitions, cancellationToken)
                            .WithCancellation(cancellationToken))
         {
             if (responseChunk.IsDone)
