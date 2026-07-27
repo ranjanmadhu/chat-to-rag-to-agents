@@ -152,7 +152,7 @@ public sealed class ChatServiceTests
             new StubChatModelClient(
                 "Tool call requested",
                 toolCalls: [new AiToolCall("calculator", "{\"expression\":\"6 * 7\"}")]),
-            new StubChatToolService(_ => null),
+            new StubToolOrchestrator(_ => null),
             aiToolService);
 
         var response = await service.SendAsync(
@@ -169,7 +169,7 @@ public sealed class ChatServiceTests
     {
         var service = CreateService(
             new StubChatModelClient("Hello from model fallback."),
-            new StubChatToolService(_ => null));
+            new StubToolOrchestrator(_ => null));
 
         var response = await service.SendAsync(
             new ChatRequest("Hello", EnabledToolIds: ["calculator"]),
@@ -182,7 +182,7 @@ public sealed class ChatServiceTests
 
     private static ChatService CreateService(
         IChatModelClient chatModelClient,
-        IChatToolService? chatToolService = null,
+        IToolOrchestrator? toolOrchestrator = null,
         IAiToolService? aiToolService = null,
         int maxContextCharacters = DefaultContextChars)
     {
@@ -190,7 +190,7 @@ public sealed class ChatServiceTests
             new StubChatModelClientFactory(chatModelClient),
             new StubContextWindowBudgetResolver(maxContextCharacters),
             new StubContextTokenCounter(),
-            chatToolService ?? new StubChatToolService(_ => null),
+            toolOrchestrator ?? new StubToolOrchestrator(_ => null),
             aiToolService ?? new StubAiToolService([], _ => null));
     }
 
@@ -243,7 +243,7 @@ public sealed class ChatServiceTests
         }
     }
 
-    private sealed class StubChatToolService(Func<string, ChatToolExecutionResult?> resolver) : IChatToolService
+    private sealed class StubToolOrchestrator(Func<string, ChatToolExecutionResult?> resolver) : IToolOrchestrator
     {
         public IReadOnlyCollection<ChatToolDefinition> GetAvailableTools()
             => [new ChatToolDefinition("calculator", "Calculator", "desc", ["calc 1+1"])];

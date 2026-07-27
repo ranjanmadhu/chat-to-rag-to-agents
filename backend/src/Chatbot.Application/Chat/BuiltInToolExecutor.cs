@@ -2,7 +2,7 @@ using Chatbot.Application.Tools.Deterministic;
 
 namespace Chatbot.Application.Chat;
 
-public sealed class DeterministicChatToolService(IEnumerable<IDeterministicChatTool> tools) : IChatToolService
+public sealed class BuiltInToolExecutor(IEnumerable<IDeterministicChatTool> tools) : IChatToolService
 {
     private readonly IReadOnlyCollection<IDeterministicChatTool> toolList = tools.ToArray();
 

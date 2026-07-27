@@ -24,7 +24,8 @@ public static class DependencyInjection
         services.AddSingleton<IDeterministicChatTool, CurrentDateTool>();
         services.AddSingleton<IDeterministicChatTool, CurrentTimeTool>();
         services.AddSingleton<IDeterministicChatTool, CalculatorTool>();
-        services.AddSingleton<IChatToolService, DeterministicChatToolService>();
+        services.AddSingleton<IChatToolService, BuiltInToolExecutor>();
+        services.AddSingleton<IToolOrchestrator, ToolOrchestrator>();
         services.AddSingleton<IAiToolService, SemanticKernelAiToolService>();
 
         services.AddHttpClient<OllamaChatModelClient>((serviceProvider, httpClient) =>

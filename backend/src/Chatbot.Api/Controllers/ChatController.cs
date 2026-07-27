@@ -1,4 +1,5 @@
 using Chatbot.Application.Chat;
+using Chatbot.Application.Tools;
 using Chatbot.Infrastructure.Ollama;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -10,7 +11,7 @@ namespace Chatbot.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class ChatController(
     ChatService chatService,
-    IChatToolService chatToolService,
+    IToolOrchestrator toolOrchestrator,
     IContextWindowBudgetResolver contextWindowBudgetResolver,
     IContextTokenCounter contextTokenCounter,
     IOllamaModelAdminClient ollamaModelAdminClient,
@@ -30,7 +31,7 @@ public sealed class ChatController(
 
     [HttpGet("tools")]
     public ActionResult<IReadOnlyCollection<ChatToolDefinition>> GetTools()
-        => Ok(chatToolService.GetAvailableTools());
+        => Ok(toolOrchestrator.GetAvailableTools());
 
     [HttpPost]
     public async Task<ActionResult<ChatResponse>> SendAsync(ChatRequest request, CancellationToken cancellationToken)

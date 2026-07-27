@@ -8,7 +8,7 @@ public sealed class ChatService(
     IChatModelClientFactory chatModelClientFactory,
     IContextWindowBudgetResolver contextWindowBudgetResolver,
     IContextTokenCounter contextTokenCounter,
-    IChatToolService chatToolService,
+    IToolOrchestrator toolOrchestrator,
     IAiToolService aiToolService)
 {
     private const string AssistantRole = "assistant";
@@ -48,7 +48,7 @@ public sealed class ChatService(
 
         if (enabledToolDefinitions.Count > 0)
         {
-            var deterministicFallback = await chatToolService.TryExecuteAsync(
+            var deterministicFallback = await toolOrchestrator.TryExecuteAsync(
                 request.Message,
                 request.EnabledToolIds,
                 cancellationToken);

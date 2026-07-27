@@ -3,9 +3,9 @@ using Chatbot.Application.Tools.Deterministic;
 
 namespace Chatbot.Tests;
 
-public sealed class DeterministicChatToolServiceTests
+public sealed class BuiltInToolExecutorTests
 {
-    private readonly DeterministicChatToolService service = new(
+    private readonly BuiltInToolExecutor service = new(
         [
             new CurrentDateTool(),
             new CurrentTimeTool(),

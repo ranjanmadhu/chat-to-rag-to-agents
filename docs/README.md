@@ -77,7 +77,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 | Phase 2 - Rich Context | Add one-off text, code, structured files, and image context to chat requests. | 03 | Text File Context | [Learning Guide 03](./learning-guide-03-text-file-context.md) | [0.2.0](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.0) | [PR #5 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/5/changes) |
 |  |  | 03A | PDF Context with Backend Upload and Token-Aware Budgeting | [Learning Guide 03A](./learning-guide-03a-pdf-context-backend-upload-and-token-budgeting.md) | [0.2.2](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.2) | [PR #7 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/7/changes) |
 |  |  | 04 | Image Context | [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md) | [0.2.1](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.1) | [PR #6 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/6/changes) |
-| Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | TBD | TBD | TBD |
+| Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | [Learning Guide 05](./learning-guide-05-basic-tool-calling.md) | TBD | TBD |
 |  |  | 06 | External Tools | TBD | TBD | TBD |
 |  |  | 07 | Private Business API Tools | TBD | TBD | TBD |
 |  |  | 08 | Multi-Tool Calling | TBD | TBD | TBD |
@@ -117,6 +117,11 @@ Direct links for this stage:
 4. [Learning Guide 03](./learning-guide-03-text-file-context.md)
 5. [Learning Guide 03A](./learning-guide-03a-pdf-context-backend-upload-and-token-budgeting.md)
 6. [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md)
+7. [Learning Guide 05](./learning-guide-05-basic-tool-calling.md)
+
+Tool-calling reading resources:
+
+1. See Section 15 in [Learning Guide 05](./learning-guide-05-basic-tool-calling.md)
 
 Phase 2 Milestone 04 quick demo steps:
 
@@ -137,6 +142,20 @@ Phase 2 Milestone 04 quick demo steps:
 	- Escape and backdrop close
 7. Send a second message and verify context is cleared (no images attached unless you add them again).
 8. Optional capability gate check: switch to a text-only Ollama model and verify image attach is blocked.
+
+Phase 3 Milestone 05 quick demo steps:
+
+1. Start the full stack from repo root:
+
+	node scripts/start-dev-stack.mjs
+
+2. Open the frontend at http://localhost:4200.
+3. Select provider as Gemini.
+4. Open the tools selector and enable only Calculator.
+5. Send: what is 25 times 25?
+6. Confirm the assistant responds with a tool result and the response metadata shows the used tool.
+7. Disable all tools and send the same message again.
+8. Confirm the response now comes from normal model generation without tool usage metadata.
 
 ## What You Will Learn
 
