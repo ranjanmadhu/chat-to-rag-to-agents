@@ -6,6 +6,7 @@ export interface ChatRequest {
   message: string;
   provider?: string;
   model?: string;
+  enabledToolIds?: string[];
   contextText?: string;
   contextFileName?: string;
   contextImages?: ImageContext[];
@@ -30,6 +31,7 @@ export interface ChatResponse {
   message: string;
   model: string;
   metrics?: ChatMetrics;
+  usedToolId?: string;
 }
 
 export interface ChatMetrics {
@@ -51,11 +53,12 @@ interface StreamPayload {
   error?: string;
   metrics?: ChatMetrics;
   model?: string;
+  usedToolId?: string;
 }
 
 interface StreamHandlers {
   onChunk: (chunk: string) => void;
-  onDone?: (metrics?: ChatMetrics, model?: string) => void;
+  onDone?: (metrics?: ChatMetrics, model?: string, usedToolId?: string) => void;
 }
 
 export interface OllamaModelOption {
@@ -63,8 +66,19 @@ export interface OllamaModelOption {
   label: string;
   supportsText: boolean;
   supportsImage: boolean;
+  supportsTools: boolean;
+  capabilitySource?: 'runtime' | 'fallback';
   isInstalled: boolean;
   isRecommended: boolean;
+}
+
+export interface ChatToolOption {
+  id: string;
+  displayName: string;
+  description: string;
+  category?: string;
+  usageHints: string[];
+  isDeterministic: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -76,12 +90,14 @@ export class ChatApiService {
     message: string,
     provider?: string,
     model?: string,
-    context?: TextFileContext
+    context?: TextFileContext,
+    enabledToolIds?: string[]
   ): Observable<ChatResponse> {
     return this.http.post<ChatResponse>(`${this.apiBaseUrl}/chat`, {
       message,
       provider,
       model,
+      enabledToolIds,
       contextText: context?.text,
       contextFileName: context?.fileName,
       contextImages: context?.images
@@ -93,7 +109,8 @@ export class ChatApiService {
     provider: string | undefined,
     model: string | undefined,
     handlers: StreamHandlers,
-    context?: TextFileContext
+    context?: TextFileContext,
+    enabledToolIds?: string[]
   ): Promise<void> {
     const response = await fetch(`${this.apiBaseUrl}/chat/stream`, {
       method: 'POST',
@@ -105,6 +122,7 @@ export class ChatApiService {
         message,
         provider,
         model,
+        enabledToolIds,
         contextText: context?.text,
         contextFileName: context?.fileName,
         contextImages: context?.images
@@ -129,7 +147,8 @@ export class ChatApiService {
     model: string | undefined,
     handlers: StreamHandlers,
     pdfFile: File,
-    contextImages?: ImageContext[]
+    contextImages?: ImageContext[],
+    enabledToolIds?: string[]
   ): Promise<void> {
     const formData = new FormData();
     formData.append('message', message);
@@ -146,6 +165,10 @@ export class ChatApiService {
 
     if (contextImages && contextImages.length > 0) {
       formData.append('contextImagesJson', JSON.stringify(contextImages));
+    }
+
+    if (enabledToolIds && enabledToolIds.length > 0) {
+      formData.append('enabledToolIdsJson', JSON.stringify(enabledToolIds));
     }
 
     const response = await fetch(`${this.apiBaseUrl}/chat/stream-with-pdf`, {
@@ -197,7 +220,7 @@ export class ChatApiService {
     }
 
     if (eventName === 'done') {
-      handlers.onDone?.(payload.metrics, payload.model);
+      handlers.onDone?.(payload.metrics, payload.model, payload.usedToolId);
     }
   }
 
@@ -299,6 +322,27 @@ export class ChatApiService {
     }
 
     return body as PdfContextResponse;
+  }
+
+  async fetchTools(): Promise<ChatToolOption[]> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.apiBaseUrl}/chat/tools`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+    } catch {
+      throw new Error('Backend API is unreachable. Start the backend dev server and retry.');
+    }
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? `Unable to load tools (HTTP ${response.status}).`);
+    }
+
+    return (await response.json()) as ChatToolOption[];
   }
 
   private resolveApiBaseUrl(): string {

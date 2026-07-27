@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Chatbot.Application.Chat;
+using Chatbot.Application.Tools;
 using Chatbot.Domain;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,7 @@ public sealed class GeminiChatModelClient(
     public async Task<ChatModelResponse> SendAsync(
         IReadOnlyCollection<ChatMessage> messages,
         string? model,
+        IReadOnlyCollection<AiToolDefinition>? tools,
         CancellationToken cancellationToken)
     {
         var resolvedModel = ResolveModel(model);
@@ -37,7 +39,8 @@ public sealed class GeminiChatModelClient(
         try
         {
             var request = new GeminiGenerateContentRequest(
-                messages.Select(MapMessageToContent).ToArray());
+                messages.Select(MapMessageToContent).ToArray(),
+                MapTools(tools));
 
             var requestUri = $"/v1beta/models/{resolvedModel}:generateContent?key={Uri.EscapeDataString(apiKey)}";
             var stopwatch = Stopwatch.StartNew();
@@ -46,12 +49,22 @@ public sealed class GeminiChatModelClient(
 
             var body = await response.Content.ReadFromJsonAsync<GeminiGenerateResponse>(cancellationToken);
             stopwatch.Stop();
-            var text = body?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text ?? string.Empty;
+            var candidate = body?.Candidates?.FirstOrDefault();
+            var text = candidate?.Content?.Parts?.FirstOrDefault(part => !string.IsNullOrWhiteSpace(part.Text))?.Text ?? string.Empty;
+            var toolCalls = candidate?.Content?.Parts?
+                .Where(part => part.FunctionCall is not null && !string.IsNullOrWhiteSpace(part.FunctionCall.Name))
+                .Select(part => new AiToolCall(
+                    part.FunctionCall!.Name!,
+                    part.FunctionCall.Arguments.ValueKind is JsonValueKind.Undefined
+                        ? "{}"
+                        : part.FunctionCall.Arguments.GetRawText()))
+                .ToArray();
 
             return new ChatModelResponse(
                 new ChatMessage("assistant", text),
                 resolvedModel,
-                BuildMetrics(body?.UsageMetadata, stopwatch.Elapsed));
+                BuildMetrics(body?.UsageMetadata, stopwatch.Elapsed),
+                toolCalls);
         }
         catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
         {
@@ -74,6 +87,7 @@ public sealed class GeminiChatModelClient(
     public async IAsyncEnumerable<ChatStreamChunk> StreamAsync(
         IReadOnlyCollection<ChatMessage> messages,
         string? model,
+        IReadOnlyCollection<AiToolDefinition>? tools,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var apiKey = ResolveApiKey();
@@ -86,7 +100,8 @@ public sealed class GeminiChatModelClient(
         }
 
         var request = new GeminiGenerateContentRequest(
-            messages.Select(MapMessageToContent).ToArray());
+            messages.Select(MapMessageToContent).ToArray(),
+            MapTools(tools));
 
         await foreach (var chunk in StreamFromGeminiAsync(request, model, cancellationToken))
         {
@@ -275,8 +290,33 @@ public sealed class GeminiChatModelClient(
         return string.Empty;
     }
 
+    private static IReadOnlyCollection<GeminiTool>? MapTools(IReadOnlyCollection<AiToolDefinition>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+        {
+            return null;
+        }
+
+        return
+        [
+            new GeminiTool(tools.Select(tool =>
+                new GeminiFunctionDeclaration(
+                    tool.Id,
+                    tool.Description,
+                    new GeminiFunctionParameters(
+                        "object",
+                        tool.Parameters.ToDictionary(
+                            parameter => parameter.Name,
+                            parameter => new GeminiFunctionProperty(parameter.Type, parameter.Description)),
+                        tool.Parameters.Where(parameter => parameter.IsRequired).Select(parameter => parameter.Name).ToArray()))).ToArray())
+        ];
+    }
+
     private sealed record GeminiGenerateContentRequest(
-        [property: JsonPropertyName("contents")] IReadOnlyCollection<GeminiContent> Contents);
+        [property: JsonPropertyName("contents")] IReadOnlyCollection<GeminiContent> Contents,
+        [property: JsonPropertyName("tools")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyCollection<GeminiTool>? Tools = null);
 
     private sealed record GeminiContent(
         [property: JsonPropertyName("role")] string Role,
@@ -288,11 +328,36 @@ public sealed class GeminiChatModelClient(
         string? Text = null,
         [property: JsonPropertyName("inlineData")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        GeminiInlineData? InlineData = null);
+        GeminiInlineData? InlineData = null,
+        [property: JsonPropertyName("functionCall")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        GeminiFunctionCall? FunctionCall = null);
 
     private sealed record GeminiInlineData(
         [property: JsonPropertyName("mimeType")] string MimeType,
         [property: JsonPropertyName("data")] string Data);
+
+    private sealed record GeminiTool(
+        [property: JsonPropertyName("functionDeclarations")]
+        IReadOnlyCollection<GeminiFunctionDeclaration> FunctionDeclarations);
+
+    private sealed record GeminiFunctionDeclaration(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("description")] string Description,
+        [property: JsonPropertyName("parameters")] GeminiFunctionParameters Parameters);
+
+    private sealed record GeminiFunctionParameters(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("properties")] IReadOnlyDictionary<string, GeminiFunctionProperty> Properties,
+        [property: JsonPropertyName("required")] IReadOnlyCollection<string> Required);
+
+    private sealed record GeminiFunctionProperty(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("description")] string Description);
+
+    private sealed record GeminiFunctionCall(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("args")] JsonElement Arguments);
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -308,10 +373,11 @@ public sealed class GeminiChatModelClient(
         [property: JsonPropertyName("content")] GeminiCandidateContent? Content);
 
     private sealed record GeminiCandidateContent(
-        [property: JsonPropertyName("parts")] IReadOnlyCollection<GeminiTextPart>? Parts);
+        [property: JsonPropertyName("parts")] IReadOnlyCollection<GeminiResponsePart>? Parts);
 
-    private sealed record GeminiTextPart(
-        [property: JsonPropertyName("text")] string? Text);
+    private sealed record GeminiResponsePart(
+        [property: JsonPropertyName("text")] string? Text,
+        [property: JsonPropertyName("functionCall")] GeminiFunctionCall? FunctionCall);
 
     private sealed record GeminiUsageMetadata(
         [property: JsonPropertyName("promptTokenCount")] int? PromptTokenCount,

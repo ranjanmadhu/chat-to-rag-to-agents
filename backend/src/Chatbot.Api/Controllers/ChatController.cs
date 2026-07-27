@@ -1,4 +1,5 @@
 using Chatbot.Application.Chat;
+using Chatbot.Application.Tools;
 using Chatbot.Infrastructure.Ollama;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -10,6 +11,7 @@ namespace Chatbot.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class ChatController(
     ChatService chatService,
+    IToolOrchestrator toolOrchestrator,
     IContextWindowBudgetResolver contextWindowBudgetResolver,
     IContextTokenCounter contextTokenCounter,
     IOllamaModelAdminClient ollamaModelAdminClient,
@@ -20,12 +22,16 @@ public sealed class ChatController(
     private const int MaxPdfUploadBytes = 25 * 1024 * 1024;
     private static readonly IReadOnlyCollection<ModelProfile> RecommendedModels =
     [
-        new("deepseek-r1:1.5b", "DeepSeek R1 1.5B", true, false),
-        new("gemma2:2b", "Gemma 2 2B", true, false),
-        new("phi3:mini", "Phi-3 Mini", true, false),
-        new("llama3.2:1b", "Llama 3.2 1B", true, false),
-        new("llama3.2:3b", "Llama 3.2 3B", true, false)
+        new("deepseek-r1:1.5b", "DeepSeek R1 1.5B", true, false, true),
+        new("gemma2:2b", "Gemma 2 2B", true, false, false),
+        new("phi3:mini", "Phi-3 Mini", true, false, false),
+        new("llama3.2:1b", "Llama 3.2 1B", true, false, true),
+        new("llama3.2:3b", "Llama 3.2 3B", true, false, true)
     ];
+
+    [HttpGet("tools")]
+    public ActionResult<IReadOnlyCollection<ChatToolDefinition>> GetTools()
+        => Ok(toolOrchestrator.GetAvailableTools());
 
     [HttpPost]
     public async Task<ActionResult<ChatResponse>> SendAsync(ChatRequest request, CancellationToken cancellationToken)
@@ -68,6 +74,7 @@ public sealed class ChatController(
         {
             ChatMetrics? metrics = null;
             string? model = null;
+            string? usedToolId = null;
 
             await foreach (var chunk in chatService.StreamAsync(request, cancellationToken))
             {
@@ -80,10 +87,11 @@ public sealed class ChatController(
                 {
                     metrics = chunk.Metrics;
                     model = chunk.Model;
+                    usedToolId = chunk.UsedToolId;
                 }
             }
 
-            await WriteSseEventAsync(Response, "done", new { metrics, model }, cancellationToken);
+            await WriteSseEventAsync(Response, "done", new { metrics, model, usedToolId }, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -110,6 +118,7 @@ public sealed class ChatController(
         [FromForm] string? model,
         [FromForm] IFormFile? pdfFile,
         [FromForm] string? contextImagesJson,
+        [FromForm] string? enabledToolIdsJson,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -141,10 +150,24 @@ public sealed class ChatController(
             }
         }
 
+        IReadOnlyCollection<string>? enabledToolIds = null;
+        if (!string.IsNullOrWhiteSpace(enabledToolIdsJson))
+        {
+            try
+            {
+                enabledToolIds = JsonSerializer.Deserialize<IReadOnlyCollection<string>>(enabledToolIdsJson);
+            }
+            catch (JsonException)
+            {
+                return BadRequest(new { error = "Invalid enabledToolIdsJson payload." });
+            }
+        }
+
         var request = new ChatRequest(
             Message: message,
             Provider: provider,
             Model: model,
+            EnabledToolIds: enabledToolIds,
             ContextText: extraction.ContextText,
             ContextFileName: pdfFile.FileName,
             ContextImages: contextImages);
@@ -164,6 +187,7 @@ public sealed class ChatController(
         {
             ChatMetrics? metrics = null;
             string? resolvedModel = null;
+            string? usedToolId = null;
 
             await foreach (var chunk in chatService.StreamAsync(request, cancellationToken))
             {
@@ -176,10 +200,11 @@ public sealed class ChatController(
                 {
                     metrics = chunk.Metrics;
                     resolvedModel = chunk.Model;
+                    usedToolId = chunk.UsedToolId;
                 }
             }
 
-            await WriteSseEventAsync(Response, "done", new { metrics, model = resolvedModel }, cancellationToken);
+            await WriteSseEventAsync(Response, "done", new { metrics, model = resolvedModel, usedToolId }, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -216,18 +241,27 @@ public sealed class ChatController(
                 supportsImage = installedByName.TryGetValue(model.Name, out var installedVisionModel)
                     ? installedVisionModel.SupportsImage
                     : model.SupportsImage,
+                supportsTools = installedByName.TryGetValue(model.Name, out var installedToolModel)
+                    ? installedToolModel.Capabilities.Contains("tools", StringComparer.OrdinalIgnoreCase)
+                    : model.SupportsTools,
+                capabilitySource = installedByName.ContainsKey(model.Name) ? "runtime" : "fallback",
                 isInstalled = installedByName.ContainsKey(model.Name),
                 isRecommended = true
-            });
+            })
+            .Where(model => model.supportsText);
 
             var customInstalled = installed
-                .Where(installedModel => RecommendedModels.All(model => !string.Equals(model.Name, installedModel.Name, StringComparison.OrdinalIgnoreCase)))
+                .Where(installedModel =>
+                    installedModel.SupportsText &&
+                    RecommendedModels.All(model => !string.Equals(model.Name, installedModel.Name, StringComparison.OrdinalIgnoreCase)))
                 .Select(installedModel => new
                 {
                     model = installedModel.Name,
                     label = installedModel.Name,
                     supportsText = installedModel.SupportsText,
                     supportsImage = installedModel.SupportsImage,
+                    supportsTools = installedModel.Capabilities.Contains("tools", StringComparer.OrdinalIgnoreCase),
+                    capabilitySource = "runtime",
                     isInstalled = true,
                     isRecommended = false
                 });
@@ -494,5 +528,5 @@ public sealed class ChatController(
             new(false, null, 0, Array.Empty<string>(), statusCode, errorMessage);
     }
 
-    private sealed record ModelProfile(string Name, string Label, bool SupportsText, bool SupportsImage);
+    private sealed record ModelProfile(string Name, string Label, bool SupportsText, bool SupportsImage, bool SupportsTools);
 }

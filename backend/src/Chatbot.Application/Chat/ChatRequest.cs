@@ -9,6 +9,7 @@ public sealed record ChatRequest(
 	string Message,
 	string? Provider = null,
 	string? Model = null,
+	IReadOnlyCollection<string>? EnabledToolIds = null,
 	string? ContextText = null,
 	string? ContextFileName = null,
 	IReadOnlyCollection<ChatRequestImage>? ContextImages = null,

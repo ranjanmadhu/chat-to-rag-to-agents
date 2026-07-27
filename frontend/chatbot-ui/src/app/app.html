@@ -26,23 +26,80 @@
       </label>
 
       @if (isOllamaSelected()) {
-        <label class="provider-picker model-picker" for="model-select">
-          <span class="provider-label">Model</span>
-          <select
-            id="model-select"
-            [ngModel]="selectedOllamaModel()"
-            (ngModelChange)="setOllamaModel($event)"
-            name="ollamaModel"
-            [disabled]="isSending() || isSwitchingModel()"
-          >
-            @for (model of ollamaModels(); track model.model) {
-              <option [value]="model.model" [disabled]="!model.supportsText">
-                {{ formatModelOption(model) }}
-              </option>
-            }
-          </select>
-        </label>
+        <div class="model-picker-wrap">
+          <details #modelMenu class="model-dropdown" [class.disabled]="isSending() || isSwitchingModel()">
+            <summary class="model-dropdown-trigger">
+              <span class="provider-label">Model</span>
+              <span class="model-dropdown-value">{{ getSelectedModelDisplayLabel() }}</span>
+              <mat-icon>arrow_drop_down</mat-icon>
+            </summary>
+
+            <div class="model-dropdown-menu">
+              @for (model of ollamaModels(); track model.model) {
+                <button
+                  type="button"
+                  class="model-option"
+                  [class.active]="isSelectedOllamaModel(model.model)"
+                  [disabled]="!model.supportsText || isSending() || isSwitchingModel()"
+                  (click)="selectOllamaModelFromMenu(model.model, modelMenu)"
+                >
+                  <div class="model-option-main">{{ model.label }}</div>
+                  <div class="model-option-sub">{{ formatModelCapabilitiesSubheader(model) }}</div>
+                  <div class="model-option-icons" aria-hidden="true">
+                    <span class="capability-chip tiny" [class.disabled]="!model.supportsText" title="Text support">
+                      <mat-icon>text_fields</mat-icon>
+                    </span>
+                    <span class="capability-chip tiny" [class.disabled]="!model.supportsImage" title="Image support">
+                      <mat-icon>image</mat-icon>
+                    </span>
+                    <span class="capability-chip tiny" [class.disabled]="!model.supportsTools" title="Tool calling support">
+                      <mat-icon>build</mat-icon>
+                    </span>
+                    <span class="capability-chip tiny" [class.disabled]="!model.isInstalled" title="Installed locally">
+                      <mat-icon>download_done</mat-icon>
+                    </span>
+                    <span
+                      class="capability-source-chip"
+                      [class.fallback]="getCapabilitySourceLabel(model.capabilitySource) === 'fallback'"
+                      [class.unknown]="getCapabilitySourceLabel(model.capabilitySource) === 'unknown'"
+                    >
+                      {{ getCapabilitySourceLabel(model.capabilitySource) }}
+                    </span>
+                  </div>
+                </button>
+              }
+            </div>
+          </details>
+        </div>
       }
+
+      <div class="model-capability-row" role="status" aria-label="Provider capabilities">
+        <span class="capability-chip" [class.disabled]="!selectedProviderCapabilities().supportsText" title="Text support">
+          <mat-icon>text_fields</mat-icon>
+        </span>
+        <span class="capability-chip" [class.disabled]="!selectedProviderCapabilities().supportsImage" title="Image support">
+          <mat-icon>image</mat-icon>
+        </span>
+        <span class="capability-chip" [class.disabled]="!selectedProviderCapabilities().supportsTools" title="Tool calling support">
+          <mat-icon>build</mat-icon>
+        </span>
+        <span
+          class="capability-chip"
+          [class.disabled]="!selectedProviderCapabilities().isInstalled"
+          [attr.title]="selectedProviderCapabilities().isCloud ? 'Cloud-hosted provider' : 'Installed locally'"
+        >
+          <mat-icon>{{ selectedProviderCapabilities().isCloud ? 'cloud_done' : 'download_done' }}</mat-icon>
+        </span>
+        @if (isOllamaSelected() && getSelectedModelCapabilitySource()) {
+          <span
+            class="capability-source-chip"
+            [class.fallback]="getSelectedModelCapabilitySource() === 'fallback'"
+            [class.unknown]="getSelectedModelCapabilitySource() === 'unknown'"
+          >
+            {{ getSelectedModelCapabilitySource() }}
+          </span>
+        }
+      </div>
 
       <button
         mat-icon-button
@@ -85,10 +142,25 @@
                 <markdown class="message-markdown" [data]="message.content"></markdown>
               }
 
+              @if (!isPendingAssistant($index, message) && message.usedToolId) {
+                <div class="message-tool-chip" title="Deterministic tool used for this response">
+                  <mat-icon>build</mat-icon>
+                  <span>Tool: {{ getToolDisplayName(message.usedToolId) }}</span>
+                </div>
+              }
+
               @if (!isPendingAssistant($index, message) && formatMetrics(message.metrics)) {
                 <div class="message-stats">{{ formatMetrics(message.metrics) }}</div>
               }
             } @else {
+              @if (message.enabledToolIds && message.enabledToolIds.length > 0) {
+                <div class="message-tool-enabled-row">
+                  @for (toolId of message.enabledToolIds; track toolId) {
+                    <span class="message-tool-enabled-chip">{{ getToolDisplayName(toolId) }}</span>
+                  }
+                </div>
+              }
+
               @if (message.contextFileName) {
                 <div class="message-context-chip" title="Text-file context was attached for this question">
                   <mat-icon>attach_file</mat-icon>
@@ -121,6 +193,73 @@
     </div>
 
     <form class="composer" (ngSubmit)="sendMessage()">
+      <details class="tool-dropdown" [class.disabled]="!isToolSelectionSupported()" [attr.aria-label]="'Available tools'">
+        <summary class="tool-dropdown-trigger">
+          <span class="tool-dropdown-title">Tools</span>
+          <span class="tool-dropdown-value">{{ getToolSelectorLabel() }}</span>
+        </summary>
+
+        <div class="tool-dropdown-menu">
+          <p class="tool-dropdown-help">Select deterministic tools available to this chat request.</p>
+
+          @if (!isToolSelectionSupported()) {
+            <div class="tool-disabled-note" role="status">
+              Selected model does not support tool calling. Choose a tool-capable model to enable this area.
+            </div>
+          }
+
+          @if (selectedToolCount() > 0) {
+            <button
+              mat-button
+              type="button"
+              class="tool-clear-button"
+              (click)="clearSelectedTools()"
+              [disabled]="isSending() || isSwitchingModel() || !isToolSelectionSupported()"
+            >
+              Clear
+            </button>
+          }
+
+          @if (isLoadingTools()) {
+            <div class="tool-loading" role="status">
+              <mat-spinner diameter="18"></mat-spinner>
+              <span>Loading tools...</span>
+            </div>
+          } @else if (toolsError()) {
+            <div class="tool-error" role="status">{{ toolsError() }}</div>
+          } @else if (hasAvailableTools()) {
+            <div class="tool-group-list">
+              @for (group of groupedAvailableTools(); track group.category) {
+                <section class="tool-group">
+                  <h3>{{ group.category }}</h3>
+                  <div class="tool-grid">
+                    @for (tool of group.tools; track tool.id) {
+                      <label class="tool-card" [class.selected]="isToolSelected(tool.id)">
+                        <input
+                          type="checkbox"
+                          [checked]="isToolSelected(tool.id)"
+                          [disabled]="isSending() || isSwitchingModel() || !isToolSelectionSupported()"
+                          (change)="onToolSelectionChange(tool.id, $any($event.target).checked)"
+                        />
+                        <div class="tool-content">
+                          <div class="tool-name">{{ tool.displayName }}</div>
+                          <p>{{ tool.description }}</p>
+                          @if (tool.usageHints.length > 0) {
+                            <div class="tool-hints">Try: {{ tool.usageHints[0] }}</div>
+                          }
+                        </div>
+                      </label>
+                    }
+                  </div>
+                </section>
+              }
+            </div>
+          } @else {
+            <div class="tool-empty">No tools are currently exposed by the backend.</div>
+          }
+        </div>
+      </details>
+
       <input
         #contextFileInput
         type="file"
@@ -253,18 +392,18 @@
             <mat-icon>picture_as_pdf</mat-icon>
           </button>
 
-          @if (isImageContextSupported()) {
-            <button
-              mat-icon-button
-              type="button"
-              class="composer-icon"
-              aria-label="Add image context"
-              title="Add image context"
-              (click)="openImageFilePicker(imageFileInput)"
-            >
-              <mat-icon>image</mat-icon>
-            </button>
-          }
+          <button
+            mat-icon-button
+            type="button"
+            class="composer-icon"
+            [class.unsupported]="!isImageContextSupported()"
+            aria-label="Add image context"
+            [attr.title]="isImageContextSupported() ? 'Add image context' : 'Image context is not supported by selected model'"
+            [disabled]="isSending() || isSwitchingModel() || !isImageContextSupported()"
+            (click)="openImageFilePicker(imageFileInput)"
+          >
+            <mat-icon>image</mat-icon>
+          </button>
         </div>
 
         <textarea

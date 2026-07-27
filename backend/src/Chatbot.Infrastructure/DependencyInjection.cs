@@ -2,6 +2,8 @@ using Chatbot.Application.Chat;
 using Chatbot.Infrastructure.Context;
 using Chatbot.Infrastructure.Gemini;
 using Chatbot.Infrastructure.Ollama;
+using Chatbot.Application.Tools;
+using Chatbot.Application.Tools.Deterministic;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -19,6 +21,12 @@ public static class DependencyInjection
         services.AddSingleton<IOllamaWarmupState, OllamaWarmupState>();
         services.AddSingleton<IContextWindowBudgetResolver, ContextWindowBudgetResolver>();
         services.AddSingleton<IContextTokenCounter, ProviderContextTokenCounter>();
+        services.AddSingleton<IDeterministicChatTool, CurrentDateTool>();
+        services.AddSingleton<IDeterministicChatTool, CurrentTimeTool>();
+        services.AddSingleton<IDeterministicChatTool, CalculatorTool>();
+        services.AddSingleton<IChatToolService, BuiltInToolExecutor>();
+        services.AddSingleton<IToolOrchestrator, ToolOrchestrator>();
+        services.AddSingleton<IAiToolService, SemanticKernelAiToolService>();
 
         services.AddHttpClient<OllamaChatModelClient>((serviceProvider, httpClient) =>
         {

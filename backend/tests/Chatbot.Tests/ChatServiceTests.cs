@@ -1,4 +1,5 @@
 using Chatbot.Application.Chat;
+using Chatbot.Application.Tools;
 using Chatbot.Domain;
 using System.Runtime.CompilerServices;
 
@@ -140,12 +141,57 @@ public sealed class ChatServiceTests
         Assert.Contains("Limit for provider/model is 50 chars", ex.Message);
     }
 
-    private static ChatService CreateService(IChatModelClient chatModelClient, int maxContextCharacters = DefaultContextChars)
+    [Fact]
+    public async Task SendAsync_Uses_Tool_When_Enabled_And_Message_Matches()
+    {
+        var aiToolService = new StubAiToolService(
+            [new AiToolDefinition("calculator", "desc", [new AiToolParameterDefinition("expression", "string", "desc", true)])],
+            _ => new ChatToolExecutionResult("calculator", "Result: 42"));
+
+        var service = CreateService(
+            new StubChatModelClient(
+                "Tool call requested",
+                toolCalls: [new AiToolCall("calculator", "{\"expression\":\"6 * 7\"}")]),
+            new StubToolOrchestrator(_ => null),
+            aiToolService);
+
+        var response = await service.SendAsync(
+            new ChatRequest("calculate 6 * 7", EnabledToolIds: ["calculator"]),
+            CancellationToken.None);
+
+        Assert.Equal("Result: 42", response.Message);
+        Assert.Equal("tool:calculator", response.Model);
+        Assert.Equal("calculator", response.UsedToolId);
+    }
+
+    [Fact]
+    public async Task SendAsync_Falls_Back_To_Model_When_No_Tool_Result()
+    {
+        var service = CreateService(
+            new StubChatModelClient("Hello from model fallback."),
+            new StubToolOrchestrator(_ => null));
+
+        var response = await service.SendAsync(
+            new ChatRequest("Hello", EnabledToolIds: ["calculator"]),
+            CancellationToken.None);
+
+        Assert.Equal("Hello from model fallback.", response.Message);
+        Assert.Equal("stub-model", response.Model);
+        Assert.Null(response.UsedToolId);
+    }
+
+    private static ChatService CreateService(
+        IChatModelClient chatModelClient,
+        IToolOrchestrator? toolOrchestrator = null,
+        IAiToolService? aiToolService = null,
+        int maxContextCharacters = DefaultContextChars)
     {
         return new ChatService(
             new StubChatModelClientFactory(chatModelClient),
             new StubContextWindowBudgetResolver(maxContextCharacters),
-            new StubContextTokenCounter());
+            new StubContextTokenCounter(),
+            toolOrchestrator ?? new StubToolOrchestrator(_ => null),
+            aiToolService ?? new StubAiToolService([], _ => null));
     }
 
     private sealed class StubChatModelClientFactory(IChatModelClient chatModelClient) : IChatModelClientFactory
@@ -166,21 +212,26 @@ public sealed class ChatServiceTests
             => Task.FromResult<int?>(null);
     }
 
-    private sealed class StubChatModelClient(string content, Action<IReadOnlyCollection<ChatMessage>>? validator = null) : IChatModelClient
+    private sealed class StubChatModelClient(
+        string content,
+        Action<IReadOnlyCollection<ChatMessage>>? validator = null,
+        IReadOnlyCollection<AiToolCall>? toolCalls = null) : IChatModelClient
     {
         public Task<ChatModelResponse> SendAsync(
             IReadOnlyCollection<ChatMessage> messages,
             string? model,
+            IReadOnlyCollection<AiToolDefinition>? tools,
             CancellationToken cancellationToken)
         {
             validator?.Invoke(messages);
             Assert.Contains(messages, message => message.Role == "user" && !string.IsNullOrWhiteSpace(message.Content));
-            return Task.FromResult(new ChatModelResponse(new ChatMessage("assistant", content), model ?? "stub-model"));
+            return Task.FromResult(new ChatModelResponse(new ChatMessage("assistant", content), model ?? "stub-model", ToolCalls: toolCalls));
         }
 
         public async IAsyncEnumerable<ChatStreamChunk> StreamAsync(
             IReadOnlyCollection<ChatMessage> messages,
             string? model,
+            IReadOnlyCollection<AiToolDefinition>? tools,
             [EnumeratorCancellation]
             CancellationToken cancellationToken)
         {
@@ -190,5 +241,28 @@ public sealed class ChatServiceTests
             yield return new ChatStreamChunk(content, Model: model ?? "stub-model");
             yield return new ChatStreamChunk(string.Empty, IsDone: true, Model: model ?? "stub-model");
         }
+    }
+
+    private sealed class StubToolOrchestrator(Func<string, ChatToolExecutionResult?> resolver) : IToolOrchestrator
+    {
+        public IReadOnlyCollection<ChatToolDefinition> GetAvailableTools()
+            => [new ChatToolDefinition("calculator", "Calculator", "desc", ["calc 1+1"])];
+
+        public Task<ChatToolExecutionResult?> TryExecuteAsync(
+            string message,
+            IReadOnlyCollection<string>? enabledToolIds,
+            CancellationToken cancellationToken)
+            => Task.FromResult(resolver(message));
+    }
+
+    private sealed class StubAiToolService(
+        IReadOnlyCollection<AiToolDefinition> enabledDefinitions,
+        Func<AiToolCall, ChatToolExecutionResult?> resolver) : IAiToolService
+    {
+        public IReadOnlyCollection<AiToolDefinition> GetEnabledToolDefinitions(IReadOnlyCollection<string>? enabledToolIds)
+            => enabledDefinitions;
+
+        public Task<ChatToolExecutionResult?> TryExecuteToolCallAsync(AiToolCall toolCall, CancellationToken cancellationToken)
+            => Task.FromResult(resolver(toolCall));
     }
 }
