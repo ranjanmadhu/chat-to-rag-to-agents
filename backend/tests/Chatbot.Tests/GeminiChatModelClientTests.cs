@@ -3,6 +3,7 @@ using Chatbot.Domain;
 using Chatbot.Infrastructure.Gemini;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Net;
 using System.Text.Json;
 
 namespace Chatbot.Tests;
@@ -178,6 +179,71 @@ public sealed class GeminiChatModelClientTests
 
         Assert.Equal("image/png", firstPart.GetProperty("mimeType").GetString());
         Assert.Equal("AQIDBA==", firstPart.GetProperty("data").GetString());
+    }
+
+    [Fact]
+    public async Task SendAsync_When_Quota_Is_Exceeded_Returns_Friendly_429_Message()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent("quota exceeded")
+            }));
+
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://generativelanguage.googleapis.com")
+        };
+
+        var client = new GeminiChatModelClient(
+            httpClient,
+            Options.Create(new GeminiOptions
+            {
+                ApiKey = "test-key",
+                Model = "gemini-3.6-flash",
+                BaseUrl = "https://generativelanguage.googleapis.com"
+            }),
+            NullLogger<GeminiChatModelClient>.Instance);
+
+        var result = await client.SendAsync(new[] { new ChatMessage("user", "hi") }, null, null, CancellationToken.None);
+
+        Assert.Contains("burned through Madhu's credits", result.Message.Content);
+        Assert.Contains("try again soon", result.Message.Content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StreamAsync_When_Quota_Is_Exceeded_Returns_Friendly_429_Message_Then_Done()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent("quota exceeded")
+            }));
+
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://generativelanguage.googleapis.com")
+        };
+
+        var client = new GeminiChatModelClient(
+            httpClient,
+            Options.Create(new GeminiOptions
+            {
+                ApiKey = "test-key",
+                Model = "gemini-3.6-flash",
+                BaseUrl = "https://generativelanguage.googleapis.com"
+            }),
+            NullLogger<GeminiChatModelClient>.Instance);
+
+        var chunks = new List<ChatStreamChunk>();
+        await foreach (var chunk in client.StreamAsync(new[] { new ChatMessage("user", "hi") }, null, null, CancellationToken.None))
+        {
+            chunks.Add(chunk);
+        }
+
+        Assert.NotEmpty(chunks);
+        Assert.Contains("burned through Madhu's credits", chunks[0].Content);
+        Assert.True(chunks.Last().IsDone);
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) : HttpMessageHandler

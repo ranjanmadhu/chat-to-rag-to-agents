@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Chatbot.Application.Chat;
 using Chatbot.Application.Tools;
 using Chatbot.Domain;
+using Chatbot.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -60,7 +61,7 @@ public sealed class OllamaChatModelClient(
 
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                $"The configured Ollama model '{resolvedModel}' was not found. Pull it with `ollama pull {resolvedModel}` or update appsettings to a model you already have."),
+                ProviderErrorMessages.BuildOllamaModelNotFoundMessage(resolvedModel)),
                 resolvedModel);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
@@ -69,7 +70,7 @@ public sealed class OllamaChatModelClient(
 
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                $"Ollama took too long to respond (timeout: {_options.RequestTimeoutSeconds}s). Try a smaller model, ask for a shorter answer, or increase Ollama:RequestTimeoutSeconds in appsettings."),
+                ProviderErrorMessages.BuildOllamaTimeoutMessage(_options.RequestTimeoutSeconds)),
                 resolvedModel);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -78,7 +79,7 @@ public sealed class OllamaChatModelClient(
 
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-                "Ollama is not reachable yet. Start it with `ollama serve`, pull the configured model, then ask again."),
+                ProviderErrorMessages.BuildOllamaUnavailableMessage()),
                 resolvedModel);
         }
     }
@@ -106,21 +107,21 @@ public sealed class OllamaChatModelClient(
         {
             logger.LogWarning(ex, "Configured Ollama model {Model} was not found.", resolvedModel);
             stream = SingleMessageAsync(
-                $"The configured Ollama model '{resolvedModel}' was not found. Pull it with `ollama pull {resolvedModel}` or update appsettings to a model you already have.",
+                ProviderErrorMessages.BuildOllamaModelNotFoundMessage(resolvedModel),
                 resolvedModel);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning(ex, "Ollama stream timed out after {TimeoutSeconds}s.", _options.RequestTimeoutSeconds);
             stream = SingleMessageAsync(
-                $"Ollama took too long to respond (timeout: {_options.RequestTimeoutSeconds}s). Try a smaller model, ask for a shorter answer, or increase Ollama:RequestTimeoutSeconds in appsettings.",
+                ProviderErrorMessages.BuildOllamaTimeoutMessage(_options.RequestTimeoutSeconds),
                 resolvedModel);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             logger.LogWarning(ex, "Ollama stream is unavailable.");
             stream = SingleMessageAsync(
-                "Ollama is not reachable yet. Start it with `ollama serve`, pull the configured model, then ask again.",
+                ProviderErrorMessages.BuildOllamaUnavailableMessage(),
                 resolvedModel);
         }
 

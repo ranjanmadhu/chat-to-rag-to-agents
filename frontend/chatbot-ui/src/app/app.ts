@@ -13,7 +13,8 @@ import {
   ChatToolOption,
   ImageContext,
   OllamaModelOption,
-  TextFileContext
+  TextFileContext,
+  ToolObservability
 } from './chat-api.service';
 
 type ChatRole = 'user' | 'assistant';
@@ -35,7 +36,7 @@ interface ChatMessage {
   role: ChatRole;
   content: string;
   metrics?: ChatMetrics;
-  usedToolId?: string;
+  observability?: ToolObservability;
   enabledToolIds?: string[];
   contextFileName?: string;
   contextImages?: ImagePreview[];
@@ -229,11 +230,14 @@ export class App {
             content: current.content + chunk
           }));
         },
-        onDone: (metrics?: ChatMetrics, model?: string, usedToolId?: string) => {
+        onDone: (
+          metrics?: ChatMetrics,
+          model?: string,
+          observability?: ToolObservability) => {
           this.updateMessageAt(assistantIndex, current => ({
             ...current,
             metrics,
-            usedToolId
+            observability
           }));
 
           if (
@@ -377,6 +381,49 @@ export class App {
 
     const tool = this.availableTools().find(option => option.id === toolId);
     return tool?.displayName ?? toolId;
+  }
+
+  getDecisionSourceLabel(source: ToolObservability['decisionSource']): string {
+    if (!source) {
+      return '';
+    }
+
+    if (source === 'ai') {
+      return 'AI selected tool';
+    }
+
+    if (source === 'deterministic-fallback') {
+      return 'Fallback matched tool';
+    }
+
+    return 'No tool executed';
+  }
+
+  hasDecisionDetails(message: ChatMessage): boolean {
+    const observability = message.observability;
+    return !!(
+      observability?.decisionSource ||
+      observability?.summary ||
+      observability?.notUsedReason ||
+      (observability?.steps && observability.steps.length > 0)
+    );
+  }
+
+  hasAssistantDetails(message: ChatMessage): boolean {
+    return !!(this.formatMetrics(message.metrics) || this.hasDecisionDetails(message));
+  }
+
+  getAssistantDetailsSummary(message: ChatMessage): string {
+    const metrics = this.formatMetrics(message.metrics);
+    if (metrics) {
+      return `Token details (${metrics})`;
+    }
+
+    return 'Response details';
+  }
+
+  getUsedToolId(message: ChatMessage): string | undefined {
+    return message.observability?.usedToolId;
   }
 
   isPendingAssistant(index: number, message: ChatMessage): boolean {

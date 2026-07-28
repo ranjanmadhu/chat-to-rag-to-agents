@@ -8,5 +8,6 @@ public interface IAiToolService
 
     Task<ChatToolExecutionResult?> TryExecuteToolCallAsync(
         AiToolCall toolCall,
+        string userMessage,
         CancellationToken cancellationToken);
 }

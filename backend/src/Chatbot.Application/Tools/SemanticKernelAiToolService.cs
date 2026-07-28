@@ -51,6 +51,7 @@ public sealed class SemanticKernelAiToolService(IChatToolService deterministicTo
 
     public async Task<ChatToolExecutionResult?> TryExecuteToolCallAsync(
         AiToolCall toolCall,
+        string userMessage,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -65,8 +66,8 @@ public sealed class SemanticKernelAiToolService(IChatToolService deterministicTo
         return normalizedToolId switch
         {
             "calculator" => await ExecuteCalculatorAsync(toolCall.ArgumentsJson, cancellationToken),
-            "date" => await deterministicTools.TryExecuteAsync("what is the date", ["date"], cancellationToken),
-            "time" => await deterministicTools.TryExecuteAsync("what time is it", ["time"], cancellationToken),
+            "date" => await deterministicTools.TryExecuteAsync(userMessage, ["date"], cancellationToken),
+            "time" => await deterministicTools.TryExecuteAsync(userMessage, ["time"], cancellationToken),
             _ => null
         };
     }

@@ -18,4 +18,4 @@ public sealed record ChatStreamChunk(
     bool IsDone = false,
     string? Model = null,
     ChatMetrics? Metrics = null,
-    string? UsedToolId = null);
+    ToolObservability? Observability = null);

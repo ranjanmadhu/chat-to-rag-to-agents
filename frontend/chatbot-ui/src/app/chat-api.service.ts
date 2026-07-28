@@ -31,7 +31,16 @@ export interface ChatResponse {
   message: string;
   model: string;
   metrics?: ChatMetrics;
+  observability?: ToolObservability;
+}
+
+export interface ToolObservability {
+  decisionSource?: 'ai' | 'deterministic-fallback' | 'none';
+  summary?: string;
+  steps?: string[];
+  notUsedReason?: string;
   usedToolId?: string;
+  enabledToolIds?: string[];
 }
 
 export interface ChatMetrics {
@@ -53,12 +62,15 @@ interface StreamPayload {
   error?: string;
   metrics?: ChatMetrics;
   model?: string;
-  usedToolId?: string;
+  observability?: ToolObservability;
 }
 
 interface StreamHandlers {
   onChunk: (chunk: string) => void;
-  onDone?: (metrics?: ChatMetrics, model?: string, usedToolId?: string) => void;
+  onDone?: (
+    metrics?: ChatMetrics,
+    model?: string,
+    observability?: ToolObservability) => void;
 }
 
 export interface OllamaModelOption {
@@ -220,7 +232,10 @@ export class ChatApiService {
     }
 
     if (eventName === 'done') {
-      handlers.onDone?.(payload.metrics, payload.model, payload.usedToolId);
+      handlers.onDone?.(
+        payload.metrics,
+        payload.model,
+        payload.observability);
     }
   }
 
