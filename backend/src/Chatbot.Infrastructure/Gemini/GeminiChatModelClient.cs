@@ -7,6 +7,7 @@ using System.Text.Json.Serialization;
 using Chatbot.Application.Chat;
 using Chatbot.Application.Tools;
 using Chatbot.Domain;
+using Chatbot.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -71,7 +72,7 @@ public sealed class GeminiChatModelClient(
             logger.LogWarning(ex, "Gemini request failed with status {StatusCode}.", ex.StatusCode);
             return new ChatModelResponse(new ChatMessage(
                 "assistant",
-            $"Gemini request failed ({ex.StatusCode}). Check API key permissions, model availability, and Gemini quota/rate limits for this project."),
+                ProviderErrorMessages.BuildGeminiStatusMessage(ex.StatusCode)),
             resolvedModel);
         }
         catch (Exception ex)
@@ -132,7 +133,7 @@ public sealed class GeminiChatModelClient(
         catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
         {
             logger.LogWarning(ex, "Gemini streaming request failed with status {StatusCode}.", ex.StatusCode);
-            fallbackContent = $"Gemini request failed ({ex.StatusCode}). Check API key permissions, model availability, and Gemini quota/rate limits for this project.";
+            fallbackContent = ProviderErrorMessages.BuildGeminiStatusMessage(ex.StatusCode);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

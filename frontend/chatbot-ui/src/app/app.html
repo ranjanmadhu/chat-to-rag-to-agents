@@ -142,15 +142,40 @@
                 <markdown class="message-markdown" [data]="message.content"></markdown>
               }
 
-              @if (!isPendingAssistant($index, message) && message.usedToolId) {
-                <div class="message-tool-chip" title="Deterministic tool used for this response">
-                  <mat-icon>build</mat-icon>
-                  <span>Tool: {{ getToolDisplayName(message.usedToolId) }}</span>
-                </div>
-              }
+              @if (!isPendingAssistant($index, message) && hasAssistantDetails(message)) {
+                <details class="message-details">
+                  <summary>{{ getAssistantDetailsSummary(message) }}</summary>
 
-              @if (!isPendingAssistant($index, message) && formatMetrics(message.metrics)) {
-                <div class="message-stats">{{ formatMetrics(message.metrics) }}</div>
+                  <div class="message-details-body" role="status" aria-label="Response details">
+                    @if (formatMetrics(message.metrics)) {
+                      <p class="message-details-metrics">{{ formatMetrics(message.metrics) }}</p>
+                    }
+
+                    @if (getUsedToolId(message)) {
+                      <p class="message-details-line">Tool: {{ getToolDisplayName(getUsedToolId(message)) }}</p>
+                    }
+
+                    @if (message.observability?.decisionSource) {
+                      <p class="message-details-line">Decision: {{ getDecisionSourceLabel(message.observability?.decisionSource) }}</p>
+                    }
+
+                    @if (message.observability?.summary) {
+                      <p class="message-observability-summary">{{ message.observability?.summary }}</p>
+                    }
+
+                    @if (message.observability?.notUsedReason) {
+                      <p class="message-observability-reason">Reason: {{ message.observability?.notUsedReason }}</p>
+                    }
+
+                    @if (message.observability?.steps && message.observability?.steps?.length > 0) {
+                      <ul class="message-observability-steps">
+                        @for (step of message.observability?.steps || []; track step) {
+                          <li>{{ step }}</li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                </details>
               }
             } @else {
               @if (message.enabledToolIds && message.enabledToolIds.length > 0) {

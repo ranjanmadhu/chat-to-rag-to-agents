@@ -428,7 +428,6 @@
   padding: 3px 8px;
 }
 
-.message-tool-chip,
 .message-tool-enabled-chip {
   background: color-mix(in srgb, #5e9fff 18%, transparent);
   border: 1px solid color-mix(in srgb, #5e9fff 34%, var(--border-soft));
@@ -438,6 +437,40 @@
   gap: 4px;
   margin: 0 6px 8px 0;
   padding: 2px 8px;
+}
+
+.message-details {
+  margin-top: 10px;
+}
+
+.message-details summary {
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.message-details-body {
+  background: color-mix(in srgb, #5e9fff 8%, transparent);
+  border: 1px solid var(--border-soft);
+  margin-top: 6px;
+  padding: 8px;
+}
+
+.message-observability-summary,
+.message-observability-reason {
+  font-size: 0.74rem;
+}
+
+.message-observability-summary,
+.message-observability-reason {
+  font-size: 0.74rem;
+}
+
+.message-observability-steps {
+  font-size: 0.72rem;
+  margin: 4px 0 0 16px;
+  padding: 0;
 }
 
 .message-tool-enabled-row {
@@ -626,14 +659,6 @@
 .message-markdown li > p {
   display: inline;
   margin: 0;
-}
-
-.message-stats {
-  border-top: 1px dashed var(--border-soft);
-  color: var(--text-dim);
-  font-size: 0.74rem;
-  margin-top: 12px;
-  padding-top: 8px;
 }
 
 .message-markdown :first-child {

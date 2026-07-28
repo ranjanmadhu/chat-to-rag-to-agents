@@ -9,7 +9,8 @@ public sealed class ChatService(
     IContextWindowBudgetResolver contextWindowBudgetResolver,
     IContextTokenCounter contextTokenCounter,
     IToolOrchestrator toolOrchestrator,
-    IAiToolService aiToolService)
+    IAiToolService aiToolService,
+    IToolCallRelevancePolicy toolCallRelevancePolicy)
 {
     private const string AssistantRole = "assistant";
     private const string SystemRole = "system";
@@ -24,33 +25,64 @@ public sealed class ChatService(
             throw new ArgumentException("Message is required.", nameof(request));
         }
 
+        var normalizedEnabledToolIds = (request.EnabledToolIds ?? [])
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .ToArray();
+
         var messages = await BuildMessagesAsync(request, cancellationToken);
-        var enabledToolDefinitions = aiToolService.GetEnabledToolDefinitions(request.EnabledToolIds);
+        var enabledToolDefinitions = aiToolService.GetEnabledToolDefinitions(normalizedEnabledToolIds);
 
         var chatModelClient = chatModelClientFactory.Resolve(request.Provider);
         var response = await chatModelClient.SendAsync(messages, request.Model, enabledToolDefinitions, cancellationToken);
+        var rejectedToolCallReasons = new List<string>();
+        var hadModelToolCalls = response.ToolCalls is { Count: > 0 };
 
-        if (response.ToolCalls is not null && response.ToolCalls.Count > 0)
+        if (response.ToolCalls is { Count: > 0 } toolCalls)
         {
-            foreach (var toolCall in response.ToolCalls)
+            foreach (var toolCall in toolCalls)
             {
-                var toolResult = await aiToolService.TryExecuteToolCallAsync(toolCall, cancellationToken);
+                var validation = toolCallRelevancePolicy.Validate(toolCall, request.Message, enabledToolDefinitions);
+                if (!validation.IsValid)
+                {
+                    rejectedToolCallReasons.Add(validation.Reason);
+                    continue;
+                }
+
+                var toolResult = await aiToolService.TryExecuteToolCallAsync(
+                    toolCall,
+                    request.Message,
+                    cancellationToken);
                 if (toolResult is not null)
                 {
                     return new ChatResponse(
                         toolResult.Output,
                         $"tool:{toolResult.ToolId}",
-                        Metrics: null,
-                        UsedToolId: toolResult.ToolId);
+                        Metrics: response.Metrics,
+                        Observability: new ToolObservability(
+                            DecisionSource: "ai",
+                            Summary: $"AI selected '{toolResult.ToolId}' from {normalizedEnabledToolIds.Length} enabled tool(s).",
+                            Steps:
+                            [
+                                $"Enabled tools: {normalizedEnabledToolIds.Length}",
+                                validation.Reason,
+                                $"Model called: {toolCall.ToolId}",
+                                $"Executed: {toolResult.ToolId}"
+                            ],
+                            UsedToolId: toolResult.ToolId,
+                            EnabledToolIds: normalizedEnabledToolIds));
                 }
+
+                rejectedToolCallReasons.Add(
+                    $"Rejected: tool '{toolCall.ToolId}' passed validation but execution returned no result.");
             }
         }
 
-        if (enabledToolDefinitions.Count > 0)
+        if (enabledToolDefinitions.Count > 0 && !hadModelToolCalls)
         {
             var deterministicFallback = await toolOrchestrator.TryExecuteAsync(
                 request.Message,
-                request.EnabledToolIds,
+                normalizedEnabledToolIds,
                 cancellationToken);
 
             if (deterministicFallback is not null)
@@ -58,19 +90,58 @@ public sealed class ChatService(
                 return new ChatResponse(
                     deterministicFallback.Output,
                     $"tool:{deterministicFallback.ToolId}",
-                    Metrics: null,
-                    UsedToolId: deterministicFallback.ToolId);
+                    Metrics: response.Metrics,
+                    Observability: new ToolObservability(
+                        DecisionSource: "deterministic-fallback",
+                        Summary: $"Fallback matched '{deterministicFallback.ToolId}' after no executable model tool call.",
+                        Steps:
+                        [
+                            $"Enabled tools: {normalizedEnabledToolIds.Length}",
+                            "No executable model tool call",
+                            $"Fallback executed: {deterministicFallback.ToolId}"
+                        ],
+                        UsedToolId: deterministicFallback.ToolId,
+                        EnabledToolIds: normalizedEnabledToolIds));
             }
+        }
+
+        // Some providers return only tool calls with empty assistant text. If all calls were rejected
+        // or produced no executable result, request a plain model answer without tools.
+        if (hadModelToolCalls && string.IsNullOrWhiteSpace(response.Message.Content))
+        {
+            response = await chatModelClient.SendAsync(messages, request.Model, [], cancellationToken);
+            rejectedToolCallReasons.Add("Requested follow-up model answer without tools.");
         }
 
         var content = string.IsNullOrWhiteSpace(response.Message.Content)
             ? "The model returned an empty response."
             : response.Message.Content.Trim();
 
+        var hasEnabledTools = normalizedEnabledToolIds.Length > 0;
+        var rejectedReason = rejectedToolCallReasons.Count > 0
+            ? string.Join(" ", rejectedToolCallReasons)
+            : null;
+        var observability = hasEnabledTools
+            ? new ToolObservability(
+                DecisionSource: "none",
+                Summary: $"AI answered directly; no tool was executed ({normalizedEnabledToolIds.Length} enabled).",
+                Steps:
+                [
+                    $"Enabled tools: {normalizedEnabledToolIds.Length}",
+                    rejectedToolCallReasons.Count > 0
+                        ? $"Rejected model tool calls: {rejectedToolCallReasons.Count}"
+                        : "No executable tool call",
+                    "Returned model output"
+                ],
+                NotUsedReason: rejectedReason ?? "No enabled tool was selected for this request.",
+                EnabledToolIds: normalizedEnabledToolIds)
+            : null;
+
         return new ChatResponse(
             content,
             response.Model,
-            response.Metrics);
+            response.Metrics,
+            Observability: observability);
     }
 
     public async IAsyncEnumerable<ChatStreamChunk> StreamAsync(
@@ -91,7 +162,8 @@ public sealed class ChatService(
                 string.Empty,
                 IsDone: true,
                 Model: response.Model,
-                UsedToolId: response.UsedToolId);
+                Metrics: response.Metrics,
+                Observability: response.Observability);
             yield break;
         }
 

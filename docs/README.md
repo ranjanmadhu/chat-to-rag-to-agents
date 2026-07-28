@@ -78,6 +78,7 @@ The objective is not only to build a chatbot. It is to understand how each capab
 |  |  | 03A | PDF Context with Backend Upload and Token-Aware Budgeting | [Learning Guide 03A](./learning-guide-03a-pdf-context-backend-upload-and-token-budgeting.md) | [0.2.2](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.2) | [PR #7 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/7/changes) |
 |  |  | 04 | Image Context | [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md) | [0.2.1](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.2.1) | [PR #6 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/6/changes) |
 | Phase 3 - Tool-Enabled Assistant | Move beyond text generation by allowing model-selected structured tool usage. | 05 | Tool Calling | [Learning Guide 05](./learning-guide-05-basic-tool-calling.md) | [0.3.0](https://github.com/ranjanmadhu/chat-to-rag-to-agents/releases/tag/0.3.0) | [PR #8 diff](https://github.com/ranjanmadhu/chat-to-rag-to-agents/pull/8/changes) |
+|  |  | 05A | Tool-Call Relevance and Basic Observability | [Learning Guide 05A](./learning-guide-05a-tool-call-relevance-and-basic-observability.md) | TBD | TBD |
 |  |  | 06 | External Tools | TBD | TBD | TBD |
 |  |  | 07 | Private Business API Tools | TBD | TBD | TBD |
 |  |  | 08 | Multi-Tool Calling | TBD | TBD | TBD |
@@ -118,6 +119,7 @@ Direct links for this stage:
 5. [Learning Guide 03A](./learning-guide-03a-pdf-context-backend-upload-and-token-budgeting.md)
 6. [Learning Guide 04](./learning-guide-04-image-context-multi-image-gallery-and-fast-input.md)
 7. [Learning Guide 05](./learning-guide-05-basic-tool-calling.md)
+8. [Learning Guide 05A](./learning-guide-05a-tool-call-relevance-and-basic-observability.md)
 
 Tool-calling reading resources:
 
@@ -156,6 +158,20 @@ Phase 3 Milestone 05 quick demo steps:
 6. Confirm the assistant responds with a tool result and the response metadata shows the used tool.
 7. Disable all tools and send the same message again.
 8. Confirm the response now comes from normal model generation without tool usage metadata.
+
+Phase 3 Milestone 05A quick demo steps:
+
+1. Start the full stack from repo root:
+
+	node scripts/start-dev-stack.mjs
+
+2. Open the frontend at http://localhost:4200.
+3. Select provider as Gemini and enable only Date.
+4. Send: who was the last president?
+5. Expand response details and verify the reason explains why no tool was executed.
+6. Send: what is the date today?
+7. Expand response details and verify the tool was executed with AI decision source.
+8. Optional: simulate provider failure scenarios and verify friendly fallback messages.
 
 ## What You Will Learn
 

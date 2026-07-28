@@ -74,7 +74,7 @@ public sealed class ChatController(
         {
             ChatMetrics? metrics = null;
             string? model = null;
-            string? usedToolId = null;
+            ToolObservability? observability = null;
 
             await foreach (var chunk in chatService.StreamAsync(request, cancellationToken))
             {
@@ -87,11 +87,15 @@ public sealed class ChatController(
                 {
                     metrics = chunk.Metrics;
                     model = chunk.Model;
-                    usedToolId = chunk.UsedToolId;
+                    observability = chunk.Observability;
                 }
             }
 
-            await WriteSseEventAsync(Response, "done", new { metrics, model, usedToolId }, cancellationToken);
+            await WriteSseEventAsync(
+                Response,
+                "done",
+                new { metrics, model, observability },
+                cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -187,7 +191,7 @@ public sealed class ChatController(
         {
             ChatMetrics? metrics = null;
             string? resolvedModel = null;
-            string? usedToolId = null;
+            ToolObservability? observability = null;
 
             await foreach (var chunk in chatService.StreamAsync(request, cancellationToken))
             {
@@ -200,11 +204,15 @@ public sealed class ChatController(
                 {
                     metrics = chunk.Metrics;
                     resolvedModel = chunk.Model;
-                    usedToolId = chunk.UsedToolId;
+                    observability = chunk.Observability;
                 }
             }
 
-            await WriteSseEventAsync(Response, "done", new { metrics, model = resolvedModel, usedToolId }, cancellationToken);
+            await WriteSseEventAsync(
+                Response,
+                "done",
+                new { metrics, model = resolvedModel, observability },
+                cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

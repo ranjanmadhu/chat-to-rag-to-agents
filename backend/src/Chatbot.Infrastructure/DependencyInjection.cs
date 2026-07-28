@@ -21,12 +21,36 @@ public static class DependencyInjection
         services.AddSingleton<IOllamaWarmupState, OllamaWarmupState>();
         services.AddSingleton<IContextWindowBudgetResolver, ContextWindowBudgetResolver>();
         services.AddSingleton<IContextTokenCounter, ProviderContextTokenCounter>();
-        services.AddSingleton<IDeterministicChatTool, CurrentDateTool>();
-        services.AddSingleton<IDeterministicChatTool, CurrentTimeTool>();
-        services.AddSingleton<IDeterministicChatTool, CalculatorTool>();
+
+        var deterministicToolTypes = typeof(IDeterministicChatTool).Assembly
+            .GetTypes()
+            .Where(type =>
+                !type.IsAbstract &&
+                !type.IsInterface &&
+                typeof(IDeterministicChatTool).IsAssignableFrom(type));
+
+        foreach (var toolType in deterministicToolTypes)
+        {
+            services.AddSingleton(typeof(IDeterministicChatTool), toolType);
+        }
+
         services.AddSingleton<IChatToolService, BuiltInToolExecutor>();
         services.AddSingleton<IToolOrchestrator, ToolOrchestrator>();
         services.AddSingleton<IAiToolService, SemanticKernelAiToolService>();
+
+        var validatorTypes = typeof(IToolCallRelevanceValidator).Assembly
+            .GetTypes()
+            .Where(type =>
+                !type.IsAbstract &&
+                !type.IsInterface &&
+                typeof(IToolCallRelevanceValidator).IsAssignableFrom(type));
+
+        foreach (var validatorType in validatorTypes)
+        {
+            services.AddSingleton(typeof(IToolCallRelevanceValidator), validatorType);
+        }
+
+        services.AddSingleton<IToolCallRelevancePolicy, ToolCallRelevancePolicy>();
 
         services.AddHttpClient<OllamaChatModelClient>((serviceProvider, httpClient) =>
         {
